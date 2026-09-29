@@ -3,3 +3,6 @@
 *.mov
 *.avi
 *.mkv
+storage/outputs/videos.json
+models/*.onnx
+models/*.onnx.json

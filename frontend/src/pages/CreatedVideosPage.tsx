@@ -153,7 +153,7 @@ export default function CreatedVideosPage({ onNavigateToCreate }: { onNavigateTo
 
       {/* Video Grid */}
       {!loading && filteredVideos.length > 0 && (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filteredVideos.map((video, idx) => {
             const accent = ACCENTS[idx % ACCENTS.length];
             const videoSrc = `${API_BASE}${video.url}`;
@@ -174,7 +174,7 @@ export default function CreatedVideosPage({ onNavigateToCreate }: { onNavigateTo
                       src={videoSrc}
                       controls
                       preload="metadata"
-                      className="h-48 w-full object-cover"
+                      className="aspect-[9/16] w-full object-contain"
                     />
                   </div>
 

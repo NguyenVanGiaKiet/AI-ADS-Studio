@@ -3,11 +3,17 @@ package service
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,28 +23,128 @@ import (
 type RemixService struct {
 	UploadDir     string
 	OutputDir     string
+	OutputsFile   string
 	FFmpegService *FFmpegService
 	TTSService    *TTSService
 
-	mu       sync.RWMutex
-	uploads  map[string]model.UploadedVideo
-	tasks    map[string]*model.RemixTask
-	outputs  map[string]model.OutputVideo
+	mu      sync.RWMutex
+	uploads map[string]model.UploadedVideo
+	tasks   map[string]*model.RemixTask
+	outputs map[string]model.OutputVideo
 }
 
 func NewRemixService(uploadDir, outputDir string, ffmpegSvc *FFmpegService, ttsSvc *TTSService) *RemixService {
 	os.MkdirAll(uploadDir, 0755)
 	os.MkdirAll(outputDir, 0755)
 
-	return &RemixService{
+	service := &RemixService{
 		UploadDir:     uploadDir,
 		OutputDir:     outputDir,
+		OutputsFile:   filepath.Join(outputDir, "videos.json"),
 		FFmpegService: ffmpegSvc,
 		TTSService:    ttsSvc,
 		uploads:       make(map[string]model.UploadedVideo),
 		tasks:         make(map[string]*model.RemixTask),
 		outputs:       make(map[string]model.OutputVideo),
 	}
+	service.loadOutputs()
+	return service
+}
+
+func (s *RemixService) loadOutputs() {
+	knownFiles := make(map[string]bool)
+	if data, err := os.ReadFile(s.OutputsFile); err == nil {
+		var outputs []model.OutputVideo
+		if err := json.Unmarshal(data, &outputs); err != nil {
+			log.Printf("[RemixService] Could not read output manifest: %v", err)
+		} else {
+			for _, output := range outputs {
+				if _, err := os.Stat(filepath.Join(s.OutputDir, output.Filename)); err == nil {
+					s.outputs[output.ID] = output
+					knownFiles[output.Filename] = true
+				}
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		log.Printf("[RemixService] Could not open output manifest: %v", err)
+	}
+
+	entries, err := os.ReadDir(s.OutputDir)
+	if err != nil {
+		log.Printf("[RemixService] Could not scan output directory: %v", err)
+		return
+	}
+	for _, entry := range entries {
+		filename := entry.Name()
+		if entry.IsDir() || knownFiles[filename] || !strings.EqualFold(filepath.Ext(filename), ".mp4") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil || info.Size() == 0 {
+			continue
+		}
+
+		stem := strings.TrimSuffix(filename, filepath.Ext(filename))
+		parts := strings.Split(stem, "_")
+		if len(parts) < 3 || parts[0] != "remix" {
+			continue
+		}
+		sequence := parts[len(parts)-1]
+		taskID := strings.Join(parts[1:len(parts)-1], "_")
+		output := model.OutputVideo{
+			ID:        "recovered-" + stem,
+			TaskID:    taskID,
+			Title:     fmt.Sprintf("Remix #%s (đã khôi phục)", sequence),
+			Filename:  filename,
+			URL:       "/storage/outputs/" + filename,
+			Duration:  probeVideoDuration(filepath.Join(s.OutputDir, filename)),
+			Size:      info.Size(),
+			CreatedAt: info.ModTime(),
+		}
+		s.outputs[output.ID] = output
+	}
+
+	if len(s.outputs) > 0 {
+		if err := s.persistOutputs(); err != nil {
+			log.Printf("[RemixService] Could not persist recovered outputs: %v", err)
+		}
+	}
+}
+
+func probeVideoDuration(path string) int {
+	output, err := exec.Command("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path).Output()
+	if err != nil {
+		return 0
+	}
+	duration, err := strconv.ParseFloat(strings.TrimSpace(string(output)), 64)
+	if err != nil {
+		return 0
+	}
+	return int(duration + 0.5)
+}
+
+func (s *RemixService) persistOutputs() error {
+	outputs := make([]model.OutputVideo, 0, len(s.outputs))
+	for _, output := range s.outputs {
+		outputs = append(outputs, output)
+	}
+	sort.Slice(outputs, func(i, j int) bool {
+		return outputs[i].CreatedAt.Before(outputs[j].CreatedAt)
+	})
+
+	data, err := json.MarshalIndent(outputs, "", "  ")
+	if err != nil {
+		return err
+	}
+	temporaryFile := s.OutputsFile + ".tmp"
+	if err := os.WriteFile(temporaryFile, data, 0644); err != nil {
+		return err
+	}
+	if err := os.Rename(temporaryFile, s.OutputsFile); err != nil {
+		_ = os.Remove(temporaryFile)
+		return err
+	}
+	return nil
 }
 
 func generateID() string {
@@ -209,7 +315,12 @@ func (s *RemixService) processRemixTask(taskID string) {
 
 		s.mu.Lock()
 		s.outputs[outVid.ID] = outVid
+		persistErr := s.persistOutputs()
 		s.mu.Unlock()
+		if persistErr != nil {
+			s.updateTaskStatus(taskID, "failed", progressPct, fmt.Sprintf("Video đã tạo nhưng không thể lưu danh sách: %v", persistErr))
+			return
+		}
 	}
 
 	s.mu.Lock()
@@ -259,5 +370,8 @@ func (s *RemixService) GetOutputs() []model.OutputVideo {
 	for _, o := range s.outputs {
 		result = append(result, o)
 	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].CreatedAt.After(result[j].CreatedAt)
+	})
 	return result
 }
