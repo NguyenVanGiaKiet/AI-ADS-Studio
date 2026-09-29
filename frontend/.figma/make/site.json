@@ -1,0 +1,10 @@
+{
+  "description": "Create and manage large-scale video ad campaigns with a vibrant, maximalist dashboard designed for joyful, high-volume video production.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
