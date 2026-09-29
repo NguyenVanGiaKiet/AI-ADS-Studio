@@ -1,53 +1,217 @@
 package service
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
 
 	"ai-ads-studio/backend/internal/model"
 )
 
 type TTSService struct {
-	AudioDir string
+	AudioDir   string
+	ModelDir   string
+	Executable string
 }
 
 func NewTTSService(audioDir string) *TTSService {
-	os.MkdirAll(audioDir, 0755)
-	return &TTSService{AudioDir: audioDir}
+	_ = os.MkdirAll(audioDir, 0755)
+	modelDir := os.Getenv("PIPER_MODEL_DIR")
+	if modelDir == "" {
+		modelDir = "models"
+		if _, err := os.Stat(modelDir); err != nil {
+			if _, rootErr := os.Stat(filepath.Join("backend", modelDir)); rootErr == nil {
+				modelDir = filepath.Join("backend", modelDir)
+			}
+		}
+	}
+	executable := os.Getenv("PIPER_EXECUTABLE")
+	if executable == "" {
+		executable = findPiperExecutable()
+	}
+	return &TTSService{AudioDir: audioDir, ModelDir: modelDir, Executable: executable}
 }
 
-// GeneratePreview creates a preview audio file or returns preview metadata.
+func findPiperExecutable() string {
+	if executable, err := exec.LookPath("piper"); err == nil {
+		return executable
+	}
+	if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+		matches, _ := filepath.Glob(filepath.Join(localAppData, "Programs", "Python", "Python*", "Scripts", "piper.exe"))
+		if len(matches) > 0 {
+			return matches[len(matches)-1]
+		}
+	}
+	return "piper"
+}
+
+func (s *TTSService) GetVoices() []model.VoiceOption {
+	modelPaths, _ := filepath.Glob(filepath.Join(s.ModelDir, "vi_VN-*.onnx"))
+	sort.Strings(modelPaths)
+	voices := make([]model.VoiceOption, 0)
+	for _, modelPath := range modelPaths {
+		modelID := strings.TrimSuffix(filepath.Base(modelPath), filepath.Ext(modelPath))
+		configData, err := os.ReadFile(modelPath + ".json")
+		if err != nil {
+			continue
+		}
+		var config struct {
+			NumSpeakers int            `json:"num_speakers"`
+			SpeakerMap  map[string]int `json:"speaker_id_map"`
+		}
+		if json.Unmarshal(configData, &config) != nil {
+			continue
+		}
+		if config.NumSpeakers > 1 {
+			speakerIDs := make([]int, 0, len(config.SpeakerMap))
+			speakerNames := make(map[int]string, len(config.SpeakerMap))
+			for name, id := range config.SpeakerMap {
+				speakerIDs = append(speakerIDs, id)
+				speakerNames[id] = name
+			}
+			sort.Ints(speakerIDs)
+			for _, id := range speakerIDs {
+				voices = append(voices, model.VoiceOption{
+					ID:          fmt.Sprintf("%s#%d", modelID, id),
+					Name:        fmt.Sprintf("VIVOS · %s", speakerNames[id]),
+					Description: fmt.Sprintf("Giọng tiếng Việt VIVOS, speaker %d", id),
+					Gender:      "Không xác định",
+					Style:       "VIVOS",
+				})
+			}
+			continue
+		}
+		voices = append(voices, model.VoiceOption{
+			ID:          modelID,
+			Name:        modelVoiceName(modelID),
+			Description: "Giọng tiếng Việt từ model Piper local",
+			Gender:      "Không xác định",
+			Style:       modelID,
+		})
+	}
+	return voices
+}
+
+func modelVoiceName(modelID string) string {
+	switch modelID {
+	case "vi_VN-25hours_single-low":
+		return "25hours · Tiếng Việt"
+	case "vi_VN-vais1000-medium":
+		return "VAI · Tiếng Việt"
+	default:
+		return modelID
+	}
+}
+
+// GeneratePreview creates a real WAV preview using Piper.
 func (s *TTSService) GeneratePreview(req model.TTSPreviewRequest) (*model.TTSPreviewResponse, error) {
 	if req.Text == "" {
 		req.Text = "Xin chào, đây là phần nghe thử giọng đọc quảng cáo của bạn."
 	}
 	if req.Voice == "" {
-		req.Voice = "Ngọc Huyền (Vbee)"
+		voices := s.GetVoices()
+		if len(voices) == 0 {
+			return nil, fmt.Errorf("chưa cài model Piper tiếng Việt trong %q", s.ModelDir)
+		}
+		req.Voice = voices[0].ID
 	}
 	if req.Rate <= 0 {
 		req.Rate = 1.0
 	}
 
-	hash := md5.Sum([]byte(fmt.Sprintf("%s_%s_%.1f", req.Text, req.Voice, req.Rate)))
-	filename := fmt.Sprintf("preview_%s.wav", hex.EncodeToString(hash[:8]))
-	audioPath := filepath.Join(s.AudioDir, filename)
-
-	// Create dummy audio metadata or file if not exists
-	if _, err := os.Stat(audioPath); os.IsNotExist(err) {
-		dummyAudioHeader := []byte("RIFF4\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00D\xac\x00\x00\x88X\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00")
-		_ = os.WriteFile(audioPath, dummyAudioHeader, 0644)
+	audioPath, err := s.GenerateSpeech(req.Text, req.Voice, req.Rate)
+	if err != nil {
+		return nil, err
 	}
-
+	filename := filepath.Base(audioPath)
 	audioURL := "/storage/tts/" + filename
 	return &model.TTSPreviewResponse{
 		AudioURL: audioURL,
 		Text:     req.Text,
 		Voice:    req.Voice,
-		Duration: 3.5 / req.Rate,
+		Duration: float64(len([]rune(req.Text))) * 0.075 / req.Rate,
 	}, nil
+}
+
+func (s *TTSService) GenerateSpeech(text, voice string, rate float64) (string, error) {
+	if strings.TrimSpace(text) == "" {
+		return "", fmt.Errorf("speech text is empty")
+	}
+	if rate <= 0 {
+		rate = 1
+	}
+	if rate < 0.7 {
+		rate = 0.7
+	} else if rate > 1.3 {
+		rate = 1.3
+	}
+	if voice == "" {
+		available := s.GetVoices()
+		if len(available) == 0 {
+			return "", fmt.Errorf("chưa cài model Piper tiếng Việt trong %q", s.ModelDir)
+		}
+		voice = available[0].ID
+	}
+	modelID, speakerText, hasSpeaker := strings.Cut(voice, "#")
+	if filepath.Base(modelID) != modelID || !strings.HasPrefix(modelID, "vi_VN-") {
+		return "", fmt.Errorf("voice không hợp lệ: %q", voice)
+	}
+	modelPath := filepath.Join(s.ModelDir, modelID+".onnx")
+	if _, err := os.Stat(modelPath); err != nil {
+		return "", fmt.Errorf("không tìm thấy model Piper %q", modelID)
+	}
+	args := []string{"--model", modelPath}
+	if hasSpeaker {
+		speakerID, err := strconv.Atoi(speakerText)
+		if err != nil || speakerID < 0 {
+			return "", fmt.Errorf("speaker ID không hợp lệ trong voice %q", voice)
+		}
+		args = append(args, "--speaker", strconv.Itoa(speakerID))
+	}
+
+	hash := md5.Sum([]byte(fmt.Sprintf("%s_%s_%.2f", text, voice, rate)))
+	audioPath := filepath.Join(s.AudioDir, fmt.Sprintf("speech_%s.wav", hex.EncodeToString(hash[:8])))
+	if info, err := os.Stat(audioPath); err == nil && info.Size() > 44 {
+		return audioPath, nil
+	}
+	inputFile, err := os.CreateTemp(s.AudioDir, "speech-input-*.txt")
+	if err != nil {
+		return "", err
+	}
+	inputPath := inputFile.Name()
+	defer os.Remove(inputPath)
+	if _, err := io.WriteString(inputFile, text); err != nil {
+		inputFile.Close()
+		return "", err
+	}
+	if err := inputFile.Close(); err != nil {
+		return "", err
+	}
+	args = append(args, "--input_file", inputPath, "--output_file", audioPath, "--length_scale", strconv.FormatFloat(1/rate, 'f', 3, 64))
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, s.Executable, args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		_ = os.Remove(audioPath)
+		return "", fmt.Errorf("Piper không tạo được giọng đọc: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	info, err := os.Stat(audioPath)
+	if err != nil || info.Size() <= 44 {
+		_ = os.Remove(audioPath)
+		return "", fmt.Errorf("Piper không tạo được WAV hợp lệ: %s", strings.TrimSpace(string(output)))
+	}
+	return audioPath, nil
 }
 
 // GenerateScript generates an advertising script from product description and style.

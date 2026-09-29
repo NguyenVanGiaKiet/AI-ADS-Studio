@@ -5,12 +5,6 @@ type DeduplicationLevel = 'off' | 'light' | 'medium' | 'strong';
 
 const API_BASE = 'http://localhost:8080';
 const ACCEPTED_VIDEO_TYPES = ['mp4', 'mov', 'avi', 'mkv', 'webm'];
-const VOICES = [
-  'Ngọc Huyền (Vbee) - Nữ Bắc - trong, rõ ràng',
-  'Minh Anh - Nữ Nam - trẻ trung, thân thiện',
-  'Hoàng Nam - Nam Bắc - ấm, tin cậy',
-  'Gia Bảo - Nam Nam - năng động, gần gũi',
-];
 
 interface OutputVideo {
   id: string;
@@ -29,6 +23,14 @@ interface RemixTaskResponse {
   progress: number;
   message: string;
   outputVideos?: OutputVideo[];
+}
+
+interface VoiceOption {
+  id: string;
+  name: string;
+  description: string;
+  gender: string;
+  style: string;
 }
 
 function formatFileSize(size: number) {
@@ -81,17 +83,39 @@ export default function RemixVideoPage() {
   const [followSubtitles, setFollowSubtitles] = useState(false);
   const [productDescription, setProductDescription] = useState('');
   const [scriptStyle, setScriptStyle] = useState('professional');
-  const [voice, setVoice] = useState(VOICES[0]);
+  const [voice, setVoice] = useState('');
+  const [voices, setVoices] = useState<VoiceOption[]>([]);
   const [speechRate, setSpeechRate] = useState(1);
   const [notice, setNotice] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Backend Task State
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentTask, setCurrentTask] = useState<RemixTaskResponse | null>(null);
   const [outputVideos, setOutputVideos] = useState<OutputVideo[]>([]);
 
-  useEffect(() => () => window.speechSynthesis?.cancel(), []);
+  useEffect(() => {
+    let isActive = true;
+    fetch(`${API_BASE}/api/tts/voices`)
+      .then(async response => {
+        if (!response.ok) throw new Error((await response.text()) || `HTTP ${response.status}`);
+        return response.json();
+      })
+      .then(result => {
+        if (!isActive || !Array.isArray(result.data)) return;
+        setVoices(result.data);
+        setVoice(result.data[0]?.id ?? '');
+        if (result.data.length === 0) setNotice('Backend chưa có model giọng Piper tiếng Việt.');
+      })
+      .catch(error => {
+        if (isActive) setNotice(`Không tải được danh sách giọng đọc: ${error instanceof Error ? error.message : 'Lỗi kết nối backend'}`);
+      });
+    return () => {
+      isActive = false;
+      previewAudioRef.current?.pause();
+    };
+  }, []);
 
   function addVideos(incomingFiles: FileList | File[]) {
     const incoming = Array.from(incomingFiles);
@@ -142,31 +166,25 @@ export default function RemixVideoPage() {
           rate: speechRate,
         }),
       });
-      if (res.ok) {
-        setNotice('Đã nhận phản hồi mẫu từ Go Backend!');
-      } else {
-        fallbackWebSpeech();
+      if (!res.ok) {
+        throw new Error((await res.text()) || `HTTP ${res.status}`);
       }
-    } catch {
-      fallbackWebSpeech();
-    } finally {
-      setTimeout(() => setIsSpeaking(false), 2000);
+      const result = await res.json();
+      if (!result.data?.audioUrl) throw new Error('Backend không trả về audio preview.');
+      previewAudioRef.current?.pause();
+      const audio = new Audio(`${API_BASE}${result.data.audioUrl}`);
+      previewAudioRef.current = audio;
+      audio.onended = () => setIsSpeaking(false);
+      audio.onerror = () => {
+        setIsSpeaking(false);
+        setNotice('Không phát được WAV preview do backend tạo.');
+      };
+      await audio.play();
+      setNotice('Đang phát giọng đọc được Piper tạo trên backend.');
+    } catch (error) {
+      setIsSpeaking(false);
+      setNotice(`Không thể tạo giọng đọc thử: ${error instanceof Error ? error.message : 'Lỗi không xác định'}`);
     }
-  }
-
-  function fallbackWebSpeech() {
-    if (!('speechSynthesis' in window)) {
-      setNotice('Trình duyệt này chưa hỗ trợ nghe thử giọng đọc.');
-      return;
-    }
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance('Xin chào, đây là phần nghe thử giọng đọc quảng cáo của bạn.');
-    utterance.rate = speechRate;
-    utterance.lang = 'vi-VN';
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-    window.speechSynthesis.speak(utterance);
   }
 
   async function startRemix() {
@@ -260,7 +278,7 @@ export default function RemixVideoPage() {
     <div className="space-y-8 pb-8 text-white">
       <div>
         <div className="mb-1 text-sm font-black uppercase tracking-widest text-[#00F5D4]">
-          🎬 Video Editor · Go Backend Powered
+          🎬 Video Editor
         </div>
         <h1 className="font-['Unbounded'] text-3xl font-black text-shadow-lg md:text-4xl">
           Remix <span className="gradient-text">Video</span>
@@ -345,7 +363,7 @@ export default function RemixVideoPage() {
         <div className="mt-5 space-y-3 border-t-2 border-dashed border-[#7B2FFF]/50 pt-4">
           <label className="flex cursor-pointer items-start gap-2.5">
             <input type="checkbox" checked={replaceVoice} onChange={event => setReplaceVoice(event.target.checked)} className="mt-0.5 size-4 accent-[#00F5D4]" />
-            <span><span className="block text-xs font-black uppercase tracking-wide text-white/75">Giọng tôi chọn bạn thì dùng giọng khác thay</span><span className="mt-1 block text-[11px] leading-relaxed text-white/40">Nhà cung cấp giọng đôi khi quá tải. Bật thì hệ thống đổi sang giọng khác cùng giới tính để video vẫn ra, và ghi rõ đã đổi giọng gì.</span></span>
+            <span><span className="block text-xs font-black uppercase tracking-wide text-white/75">Thay âm thanh video bằng giọng đọc quảng cáo</span><span className="mt-1 block text-[11px] leading-relaxed text-white/40">Piper tạo giọng tiếng Việt trên backend rồi FFmpeg ghép giọng đọc vào video.</span></span>
           </label>
           <label className="flex cursor-pointer items-start gap-2.5">
             <input type="checkbox" checked={followSubtitles} onChange={event => setFollowSubtitles(event.target.checked)} className="mt-0.5 size-4 accent-[#FF3AF2]" />
@@ -357,7 +375,7 @@ export default function RemixVideoPage() {
       <section className={`${panelClassNames[2]} ${!replaceVoice ? 'opacity-60' : ''}`}>
         <StepTitle number={3}>AI Voice - Giọng đọc quảng cáo</StepTitle>
         <div className="mb-5 rounded-2xl border-2 border-dashed border-[#00F5D4]/50 bg-[#0D0D1A]/60 px-4 py-3 text-xs leading-relaxed text-white/60">
-          <span className="font-black uppercase tracking-wide text-[#00F5D4]">Cách hoạt động:</span> Nhập mô tả sản phẩm → AI tự động viết kịch bản → Tạo giọng đọc trên máy bạn → Ghép vào video. <span className="font-bold text-[#FFE600]">Để trống nếu chỉ muốn cắt ghép video.</span>
+          <span className="font-black uppercase tracking-wide text-[#00F5D4]">Cách hoạt động:</span> Nhập mô tả sản phẩm → backend viết kịch bản → Piper tạo WAV tiếng Việt → FFmpeg thay track âm thanh video. <span className="font-bold text-[#FFE600]">Để trống nếu chỉ muốn cắt ghép video.</span>
         </div>
         {!replaceVoice && <p className="mb-4 text-xs font-bold text-[#FF6B35]">Đã tắt giọng đọc thay thế trong cài đặt video.</p>}
         <Field label="Mô tả sản phẩm (càng chi tiết càng tốt)" hint="Nhập tất cả thông tin: tên, đặc điểm, giá, khuyến mãi... AI sẽ tự viết kịch bản.">
@@ -374,8 +392,9 @@ export default function RemixVideoPage() {
           </Field>
           <Field label="Giọng đọc">
             <div className="flex gap-2">
-              <select disabled={!replaceVoice} className={`${inputClassName} min-w-0 flex-1 disabled:cursor-not-allowed`} value={voice} onChange={event => setVoice(event.target.value)}>
-                {VOICES.map(option => <option key={option} value={option}>{option}</option>)}
+              <select disabled={!replaceVoice || voices.length === 0} className={`${inputClassName} min-w-0 flex-1 disabled:cursor-not-allowed`} value={voice} onChange={event => setVoice(event.target.value)}>
+                {voices.length === 0 && <option value="">Chưa có model voice tiếng Việt</option>}
+                {voices.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
               </select>
               <button type="button" disabled={!replaceVoice || isSpeaking} onClick={previewVoice} className="shrink-0 rounded-full border-2 border-[#FF6B35] bg-[#0D0D1A]/70 px-4 text-xs font-black uppercase tracking-wide text-[#FF6B35] transition hover:bg-[#FF6B35] hover:text-[#0D0D1A] disabled:cursor-not-allowed disabled:opacity-50">{isSpeaking ? 'Đang phát…' : '▶ Nghe thử'}</button>
             </div>

@@ -42,15 +42,15 @@ type OutputVideo struct {
 
 // RemixTask represents an async remix job state.
 type RemixTask struct {
-	ID                 string         `json:"id"`
-	Status             string         `json:"status"` // pending, processing, completed, failed
-	Progress           int            `json:"progress"` // 0 - 100
-	Message            string         `json:"message"`
-	Request            RemixRequest   `json:"request"`
-	OutputVideos       []OutputVideo  `json:"outputVideos"`
-	Error              string         `json:"error,omitempty"`
-	CreatedAt          time.Time      `json:"createdAt"`
-	UpdatedAt          time.Time      `json:"updatedAt"`
+	ID           string        `json:"id"`
+	Status       string        `json:"status"`   // pending, processing, completed, failed
+	Progress     int           `json:"progress"` // 0 - 100
+	Message      string        `json:"message"`
+	Request      RemixRequest  `json:"request"`
+	OutputVideos []OutputVideo `json:"outputVideos"`
+	Error        string        `json:"error,omitempty"`
+	CreatedAt    time.Time     `json:"createdAt"`
+	UpdatedAt    time.Time     `json:"updatedAt"`
 }
 
 // TTSPreviewRequest represents a request to preview AI TTS audio.
@@ -62,8 +62,16 @@ type TTSPreviewRequest struct {
 
 // TTSPreviewResponse represents the result of a TTS preview request.
 type TTSPreviewResponse struct {
-	AudioURL string `json:"audioUrl"`
-	Text     string `json:"text"`
-	Voice    string `json:"voice"`
+	AudioURL string  `json:"audioUrl"`
+	Text     string  `json:"text"`
+	Voice    string  `json:"voice"`
 	Duration float64 `json:"duration"`
+}
+
+type VoiceOption struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Gender      string `json:"gender"`
+	Style       string `json:"style"`
 }

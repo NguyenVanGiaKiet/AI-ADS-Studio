@@ -38,12 +38,13 @@ func (f *FFmpegService) GenerateRemixVideo(
 	duration int,
 	aspectRatio string,
 	deduplication string,
+	narrationPath string,
 ) (string, string, int64, error) {
 	outFilename := fmt.Sprintf("remix_%s_%d.mp4", taskID[:8], index+1)
 	outPath := filepath.Join(f.OutputDir, outFilename)
 
 	if f.HasFFmpeg && len(inputPaths) > 0 {
-		err := f.runFFmpegRemix(index, inputPaths, outPath, duration, aspectRatio, deduplication)
+		err := f.runFFmpegRemix(index, inputPaths, outPath, duration, aspectRatio, deduplication, narrationPath)
 		if err == nil {
 			fi, e := os.Stat(outPath)
 			if e == nil {
@@ -51,6 +52,9 @@ func (f *FFmpegService) GenerateRemixVideo(
 			}
 		}
 		log.Printf("[FFmpegService] FFmpeg execution error: %v. Falling back to copy/mock.", err)
+	}
+	if narrationPath != "" {
+		return "", "", 0, fmt.Errorf("cần FFmpeg để ghép giọng đọc vào video")
 	}
 
 	// Fallback implementation: copy or create video file
@@ -64,6 +68,7 @@ func (f *FFmpegService) runFFmpegRemix(
 	duration int,
 	aspectRatio string,
 	deduplication string,
+	narrationPath string,
 ) error {
 	// Build video resolution and scale filter based on aspect ratio
 	var vfFilters []string
@@ -98,11 +103,17 @@ func (f *FFmpegService) runFFmpegRemix(
 		"-ss", "0",
 		"-t", fmt.Sprintf("%d", duration),
 		"-i", sourcePath,
-		"-vf", filterGraph,
-		"-c:v", "libx264",
-		"-preset", "fast",
-		"-c:a", "aac",
-		outPath,
+	}
+	if narrationPath != "" {
+		args = append(args,
+			"-i", narrationPath,
+			"-filter_complex", fmt.Sprintf("[1:a]apad,atrim=duration=%d[narration]", duration),
+			"-map", "0:v:0", "-map", "[narration]",
+			"-vf", filterGraph,
+			"-c:v", "libx264", "-preset", "fast", "-c:a", "aac", "-shortest", outPath,
+		)
+	} else {
+		args = append(args, "-vf", filterGraph, "-c:v", "libx264", "-preset", "fast", "-c:a", "aac", outPath)
 	}
 
 	cmd := exec.Command("ffmpeg", args...)

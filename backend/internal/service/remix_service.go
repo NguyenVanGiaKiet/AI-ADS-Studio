@@ -271,11 +271,20 @@ func (s *RemixService) processRemixTask(taskID string) {
 	}
 	s.mu.RUnlock()
 
-	// Update progress: AI script generation if voice replacement active
-	if task.Request.ReplaceVoice && task.Request.ProductDescription != "" {
-		s.updateTaskStatus(taskID, "processing", 25, "AI đang tổng hợp kịch bản & giọng đọc...")
-		_ = s.TTSService.GenerateScript(task.Request.ProductDescription, task.Request.ScriptStyle)
-		time.Sleep(600 * time.Millisecond)
+	var narrationPath string
+	if task.Request.ReplaceVoice {
+		s.updateTaskStatus(taskID, "processing", 25, "Đang viết kịch bản và tạo giọng đọc tiếng Việt...")
+		if s.TTSService == nil {
+			s.updateTaskStatus(taskID, "failed", 25, "Dịch vụ TTS chưa được khởi tạo.")
+			return
+		}
+		script := s.TTSService.GenerateScript(task.Request.ProductDescription, task.Request.ScriptStyle)
+		var err error
+		narrationPath, err = s.TTSService.GenerateSpeech(script, task.Request.Voice, task.Request.SpeechRate)
+		if err != nil {
+			s.updateTaskStatus(taskID, "failed", 25, fmt.Sprintf("Không thể tạo giọng đọc: %v", err))
+			return
+		}
 	}
 
 	totalOutputs := task.Request.OutputCount
@@ -293,6 +302,7 @@ func (s *RemixService) processRemixTask(taskID string) {
 			task.Request.Duration,
 			task.Request.AspectRatio,
 			task.Request.Deduplication,
+			narrationPath,
 		)
 
 		if err != nil {

@@ -67,6 +67,11 @@ func (h *Handler) GetUploads(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) GetVoices(w http.ResponseWriter, r *http.Request) {
+	voices := h.TTSService.GetVoices()
+	respondJSON(w, http.StatusOK, map[string]any{"data": voices})
+}
+
 func (h *Handler) PreviewTTS(w http.ResponseWriter, r *http.Request) {
 	var req model.TTSPreviewRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

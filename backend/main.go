@@ -50,6 +50,7 @@ func main() {
 	mux.HandleFunc("GET /api/health", h.HealthCheck)
 	mux.HandleFunc("POST /api/upload", h.UploadVideo)
 	mux.HandleFunc("GET /api/uploads", h.GetUploads)
+	mux.HandleFunc("GET /api/tts/voices", h.GetVoices)
 	mux.HandleFunc("POST /api/tts/preview", h.PreviewTTS)
 	mux.HandleFunc("POST /api/remix/tasks", h.CreateRemixTask)
 	mux.HandleFunc("GET /api/remix/tasks/{id}", h.GetTaskStatus)
