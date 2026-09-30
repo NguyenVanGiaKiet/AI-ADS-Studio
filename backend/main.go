@@ -8,6 +8,7 @@ import (
 
 	"ai-ads-studio/backend/internal/handler"
 	"ai-ads-studio/backend/internal/service"
+	"github.com/joho/godotenv"
 )
 
 func corsMiddleware(next http.Handler) http.Handler {
@@ -26,15 +27,22 @@ func corsMiddleware(next http.Handler) http.Handler {
 }
 
 func main() {
+	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
+		log.Printf("Could not load backend/.env: %v", err)
+	}
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
-	baseStorageDir := filepath.Join(".", "storage")
-	uploadDir := filepath.Join(baseStorageDir, "uploads")
-	outputDir := filepath.Join(baseStorageDir, "outputs")
-	ttsDir := filepath.Join(baseStorageDir, "tts")
+	outputDir := filepath.Join("storage", "outputs")
+	temporaryDir, err := os.MkdirTemp("", "ai-ads-studio-")
+	if err != nil {
+		log.Fatalf("Could not create temporary storage: %v", err)
+	}
+	defer os.RemoveAll(temporaryDir)
+	uploadDir := filepath.Join(temporaryDir, "uploads")
+	ttsDir := filepath.Join(temporaryDir, "tts")
 
 	// Initialize services
 	ffmpegSvc := service.NewFFmpegService(outputDir)
@@ -57,14 +65,15 @@ func main() {
 	mux.HandleFunc("GET /api/remix/tasks", h.GetTasks)
 	mux.HandleFunc("GET /api/videos", h.GetOutputs)
 
-	// Static file serving for uploads, outputs, and TTS audio
-	fs := http.FileServer(http.Dir(baseStorageDir))
-	mux.Handle("GET /storage/", http.StripPrefix("/storage/", fs))
+	// Keep transient media outside persistent storage while preserving the API URLs.
+	mux.Handle("GET /storage/uploads/", http.StripPrefix("/storage/uploads/", http.FileServer(http.Dir(uploadDir))))
+	mux.Handle("GET /storage/outputs/", http.StripPrefix("/storage/outputs/", http.FileServer(http.Dir(outputDir))))
+	mux.Handle("GET /storage/tts/", http.StripPrefix("/storage/tts/", http.FileServer(http.Dir(ttsDir))))
 
 	handlerWithCORS := corsMiddleware(mux)
 
 	log.Printf("🚀 AI ADS Studio Go Backend server listening on http://localhost:%s\n", port)
 	if err := http.ListenAndServe(":"+port, handlerWithCORS); err != nil {
-		log.Fatalf("Server stopped with error: %v", err)
+		log.Printf("Server stopped with error: %v", err)
 	}
 }

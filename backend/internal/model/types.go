@@ -46,6 +46,7 @@ type RemixTask struct {
 	Status       string        `json:"status"`   // pending, processing, completed, failed
 	Progress     int           `json:"progress"` // 0 - 100
 	Message      string        `json:"message"`
+	Script       string        `json:"script,omitempty"`
 	Request      RemixRequest  `json:"request"`
 	OutputVideos []OutputVideo `json:"outputVideos"`
 	Error        string        `json:"error,omitempty"`
@@ -55,9 +56,11 @@ type RemixTask struct {
 
 // TTSPreviewRequest represents a request to preview AI TTS audio.
 type TTSPreviewRequest struct {
-	Text  string  `json:"text"`
-	Voice string  `json:"voice"`
-	Rate  float64 `json:"rate"`
+	Text     string  `json:"text"`
+	Style    string  `json:"style"`
+	Voice    string  `json:"voice"`
+	Rate     float64 `json:"rate"`
+	Duration int     `json:"duration"`
 }
 
 // TTSPreviewResponse represents the result of a TTS preview request.

@@ -22,6 +22,7 @@ interface RemixTaskResponse {
   status: string;
   progress: number;
   message: string;
+  script?: string;
   outputVideos?: OutputVideo[];
 }
 
@@ -162,8 +163,10 @@ export default function RemixVideoPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: productDescription || 'Xin chào, đây là phần nghe thử giọng đọc quảng cáo của bạn.',
+          style: scriptStyle,
           voice,
           rate: speechRate,
+          duration,
         }),
       });
       if (!res.ok) {
@@ -322,8 +325,24 @@ export default function RemixVideoPage() {
           <Field label="Số lượng video đầu ra" hint="Số video mới cần tạo (1-50)">
             <input className={inputClassName} type="number" min={1} max={50} value={outputCount} onChange={event => setOutputCount(Math.min(50, Math.max(1, Number(event.target.value) || 1)))} />
           </Field>
-          <Field label="Thời lượng mong muốn (giây)" hint="Thời lượng mỗi video đầu ra (10-60 giây)">
-            <input className={inputClassName} type="number" min={10} max={60} value={duration} onChange={event => setDuration(Math.min(60, Math.max(10, Number(event.target.value) || 10)))} />
+          <Field label="Thời lượng tối đa (giây)" hint="Ghép clip tuần tự; nếu tổng nguồn ngắn hơn, video giữ nguyên thời lượng thực.">
+            <input
+              className={inputClassName}
+              type="number"
+              min={10}
+              max={60}
+              step={1}
+              value={duration}
+              onChange={event => {
+                const value = event.currentTarget.valueAsNumber;
+                if (Number.isFinite(value)) setDuration(Math.min(60, value));
+              }}
+              onBlur={event => {
+                const value = event.currentTarget.valueAsNumber;
+                if (Number.isFinite(value)) setDuration(Math.min(60, Math.max(10, Math.round(value))));
+                else setDuration(current => Math.min(60, Math.max(10, current)));
+              }}
+            />
           </Field>
           <Field label="Tỷ lệ khung hình" hint="Độ phân giải & định dạng xuất video">
             <select className={inputClassName} value={aspectRatio} onChange={event => setAspectRatio(event.target.value)}>
@@ -401,6 +420,9 @@ export default function RemixVideoPage() {
             <span className="mt-1.5 block text-[11px] text-white/40">Bấm để nghe một câu mẫu của giọng đang chọn.</span>
           </Field>
         </div>
+        <p className="mt-3 text-[11px] font-bold text-[#FFE600]">
+          Groq sẽ nhắm khoảng {Math.max(15, Math.round(duration * 2.4 * speechRate))} tiếng cho video {duration} giây ở tốc độ {speechRate.toFixed(1)}x.
+        </p>
         <div className="mt-5">
           <div className="mb-2 flex items-center justify-between text-xs font-black uppercase tracking-wide text-[#00F5D4]"><label htmlFor="speech-rate">Tốc độ đọc: {speechRate.toFixed(1)}x</label><span className="text-white/40">0.7x - 1.3x</span></div>
           <input id="speech-rate" disabled={!replaceVoice} type="range" min={0.7} max={1.3} step={0.1} value={speechRate} onChange={event => setSpeechRate(Number(event.target.value))} className="h-2 w-full cursor-pointer accent-[#00F5D4] disabled:cursor-not-allowed" />
@@ -428,6 +450,12 @@ export default function RemixVideoPage() {
               <div className="h-full bg-gradient-to-r from-[#FF3AF2] via-[#FFE600] to-[#00F5D4] transition-all duration-300" style={{ width: `${currentTask.progress}%` }} />
             </div>
             <p className="mt-2 text-xs text-white/70">{currentTask.message}</p>
+            {currentTask.script && (
+              <div className="mt-3 border-t border-dashed border-[#00F5D4]/30 pt-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#FFE600]">Kịch bản Groq đã viết</p>
+                <p className="mt-1 text-xs leading-relaxed text-white/80">{currentTask.script}</p>
+              </div>
+            )}
           </div>
         )}
 

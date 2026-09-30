@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"mime/multipart"
 	"os"
 	"os/exec"
@@ -272,14 +273,29 @@ func (s *RemixService) processRemixTask(taskID string) {
 	s.mu.RUnlock()
 
 	var narrationPath string
+	montageDuration := float64(task.Request.Duration)
 	if task.Request.ReplaceVoice {
 		s.updateTaskStatus(taskID, "processing", 25, "Đang viết kịch bản và tạo giọng đọc tiếng Việt...")
 		if s.TTSService == nil {
 			s.updateTaskStatus(taskID, "failed", 25, "Dịch vụ TTS chưa được khởi tạo.")
 			return
 		}
-		script := s.TTSService.GenerateScript(task.Request.ProductDescription, task.Request.ScriptStyle)
 		var err error
+		montageDuration, err = s.FFmpegService.MontageDuration(inputPaths, task.Request.Duration)
+		if err != nil {
+			s.updateTaskStatus(taskID, "failed", 25, fmt.Sprintf("Không thể xác định thời lượng video ghép: %v", err))
+			return
+		}
+		script, err := s.TTSService.GenerateScript(task.Request.ProductDescription, task.Request.ScriptStyle, montageDuration, task.Request.SpeechRate)
+		if err != nil {
+			s.updateTaskStatus(taskID, "failed", 25, fmt.Sprintf("Không thể viết kịch bản bằng Groq: %v", err))
+			return
+		}
+		s.mu.Lock()
+		if currentTask, ok := s.tasks[taskID]; ok {
+			currentTask.Script = script
+		}
+		s.mu.Unlock()
 		narrationPath, err = s.TTSService.GenerateSpeech(script, task.Request.Voice, task.Request.SpeechRate)
 		if err != nil {
 			s.updateTaskStatus(taskID, "failed", 25, fmt.Sprintf("Không thể tạo giọng đọc: %v", err))
@@ -295,7 +311,7 @@ func (s *RemixService) processRemixTask(taskID string) {
 		msg := fmt.Sprintf("Đang cắt ghép & chống trùng video %d/%d...", i+1, totalOutputs)
 		s.updateTaskStatus(taskID, "processing", progressPct, msg)
 
-		outFilename, _, size, err := s.FFmpegService.GenerateRemixVideo(
+		outFilename, outputPath, size, err := s.FFmpegService.GenerateRemixVideo(
 			i,
 			taskID,
 			inputPaths,
@@ -309,14 +325,20 @@ func (s *RemixService) processRemixTask(taskID string) {
 			s.updateTaskStatus(taskID, "failed", progressPct, fmt.Sprintf("Lỗi tạo video %d: %v", i+1, err))
 			return
 		}
+		actualDuration, err := probeDuration(outputPath)
+		if err != nil {
+			s.updateTaskStatus(taskID, "failed", progressPct, fmt.Sprintf("Không thể đọc thời lượng video đầu ra: %v", err))
+			return
+		}
+		actualDurationSeconds := int(math.Round(actualDuration))
 
 		outVid := model.OutputVideo{
 			ID:        generateID(),
 			TaskID:    taskID,
-			Title:     fmt.Sprintf("Remix #%d (%s - %ds)", i+1, task.Request.AspectRatio, task.Request.Duration),
+			Title:     fmt.Sprintf("Remix #%d (%s - %ds)", i+1, task.Request.AspectRatio, actualDurationSeconds),
 			Filename:  outFilename,
 			URL:       "/storage/outputs/" + outFilename,
-			Duration:  task.Request.Duration,
+			Duration:  actualDurationSeconds,
 			Size:      size,
 			CreatedAt: time.Now(),
 		}

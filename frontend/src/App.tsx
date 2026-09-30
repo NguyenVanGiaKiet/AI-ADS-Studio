@@ -229,7 +229,7 @@ export default function App() {
         ☰
       </button>
       <main className="flex-1 min-w-0 flex flex-col z-10">
-        <div className="flex-1 p-6 pt-16 md:p-8 md:pt-8 lg:p-10 overflow-y-auto custom-scroll">
+        <div className="flex-1 p-6 pt-16 md:p-8 md:pt-8 lg:p-10 overflow-y-auto custom-scroll page-scroll">
           {renderActivePage()}
         </div>
       </main>
