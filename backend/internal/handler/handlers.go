@@ -68,7 +68,11 @@ func (h *Handler) GetUploads(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetVoices(w http.ResponseWriter, r *http.Request) {
-	voices := h.TTSService.GetVoices()
+	voices, err := h.TTSService.GetVoices()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
 	respondJSON(w, http.StatusOK, map[string]any{"data": voices})
 }
 

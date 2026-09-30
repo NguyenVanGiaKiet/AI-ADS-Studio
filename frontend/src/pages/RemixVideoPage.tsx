@@ -107,7 +107,7 @@ export default function RemixVideoPage() {
         if (!isActive || !Array.isArray(result.data)) return;
         setVoices(result.data);
         setVoice(result.data[0]?.id ?? '');
-        if (result.data.length === 0) setNotice('Backend chưa có model giọng Piper tiếng Việt.');
+        if (result.data.length === 0) setNotice('Tài khoản ElevenLabs chưa có voice khả dụng.');
       })
       .catch(error => {
         if (isActive) setNotice(`Không tải được danh sách giọng đọc: ${error instanceof Error ? error.message : 'Lỗi kết nối backend'}`);
@@ -180,10 +180,10 @@ export default function RemixVideoPage() {
       audio.onended = () => setIsSpeaking(false);
       audio.onerror = () => {
         setIsSpeaking(false);
-        setNotice('Không phát được WAV preview do backend tạo.');
+        setNotice('Không phát được audio preview do ElevenLabs tạo.');
       };
       await audio.play();
-      setNotice('Đang phát giọng đọc được Piper tạo trên backend.');
+      setNotice('Đang phát giọng đọc được ElevenLabs tạo trên backend.');
     } catch (error) {
       setIsSpeaking(false);
       setNotice(`Không thể tạo giọng đọc thử: ${error instanceof Error ? error.message : 'Lỗi không xác định'}`);
@@ -382,7 +382,7 @@ export default function RemixVideoPage() {
         <div className="mt-5 space-y-3 border-t-2 border-dashed border-[#7B2FFF]/50 pt-4">
           <label className="flex cursor-pointer items-start gap-2.5">
             <input type="checkbox" checked={replaceVoice} onChange={event => setReplaceVoice(event.target.checked)} className="mt-0.5 size-4 accent-[#00F5D4]" />
-            <span><span className="block text-xs font-black uppercase tracking-wide text-white/75">Thay âm thanh video bằng giọng đọc quảng cáo</span><span className="mt-1 block text-[11px] leading-relaxed text-white/40">Piper tạo giọng tiếng Việt trên backend rồi FFmpeg ghép giọng đọc vào video.</span></span>
+            <span><span className="block text-xs font-black uppercase tracking-wide text-white/75">Thay âm thanh video bằng giọng đọc quảng cáo</span><span className="mt-1 block text-[11px] leading-relaxed text-white/40">ElevenLabs tạo voiceover trên backend rồi FFmpeg ghép vào video.</span></span>
           </label>
           <label className="flex cursor-pointer items-start gap-2.5">
             <input type="checkbox" checked={followSubtitles} onChange={event => setFollowSubtitles(event.target.checked)} className="mt-0.5 size-4 accent-[#FF3AF2]" />
@@ -394,7 +394,7 @@ export default function RemixVideoPage() {
       <section className={`${panelClassNames[2]} ${!replaceVoice ? 'opacity-60' : ''}`}>
         <StepTitle number={3}>AI Voice - Giọng đọc quảng cáo</StepTitle>
         <div className="mb-5 rounded-2xl border-2 border-dashed border-[#00F5D4]/50 bg-[#0D0D1A]/60 px-4 py-3 text-xs leading-relaxed text-white/60">
-          <span className="font-black uppercase tracking-wide text-[#00F5D4]">Cách hoạt động:</span> Nhập mô tả sản phẩm → backend viết kịch bản → Piper tạo WAV tiếng Việt → FFmpeg thay track âm thanh video. <span className="font-bold text-[#FFE600]">Để trống nếu chỉ muốn cắt ghép video.</span>
+          <span className="font-black uppercase tracking-wide text-[#00F5D4]">Cách hoạt động:</span> Nhập mô tả sản phẩm → Groq viết kịch bản → ElevenLabs tạo giọng đọc → FFmpeg ghép vào video. <span className="font-bold text-[#FFE600]">Để trống nếu chỉ muốn cắt ghép video.</span>
         </div>
         {!replaceVoice && <p className="mb-4 text-xs font-bold text-[#FF6B35]">Đã tắt giọng đọc thay thế trong cài đặt video.</p>}
         <Field label="Mô tả sản phẩm (càng chi tiết càng tốt)" hint="Nhập tất cả thông tin: tên, đặc điểm, giá, khuyến mãi... AI sẽ tự viết kịch bản.">
@@ -412,7 +412,7 @@ export default function RemixVideoPage() {
           <Field label="Giọng đọc">
             <div className="flex gap-2">
               <select disabled={!replaceVoice || voices.length === 0} className={`${inputClassName} min-w-0 flex-1 disabled:cursor-not-allowed`} value={voice} onChange={event => setVoice(event.target.value)}>
-                {voices.length === 0 && <option value="">Chưa có model voice tiếng Việt</option>}
+                {voices.length === 0 && <option value="">Chưa tải được voice ElevenLabs</option>}
                 {voices.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
               </select>
               <button type="button" disabled={!replaceVoice || isSpeaking} onClick={previewVoice} className="shrink-0 rounded-full border-2 border-[#FF6B35] bg-[#0D0D1A]/70 px-4 text-xs font-black uppercase tracking-wide text-[#FF6B35] transition hover:bg-[#FF6B35] hover:text-[#0D0D1A] disabled:cursor-not-allowed disabled:opacity-50">{isSpeaking ? 'Đang phát…' : '▶ Nghe thử'}</button>
@@ -425,8 +425,8 @@ export default function RemixVideoPage() {
         </p>
         <div className="mt-5">
           <div className="mb-2 flex items-center justify-between text-xs font-black uppercase tracking-wide text-[#00F5D4]"><label htmlFor="speech-rate">Tốc độ đọc: {speechRate.toFixed(1)}x</label><span className="text-white/40">0.7x - 1.3x</span></div>
-          <input id="speech-rate" disabled={!replaceVoice} type="range" min={0.7} max={1.3} step={0.1} value={speechRate} onChange={event => setSpeechRate(Number(event.target.value))} className="h-2 w-full cursor-pointer accent-[#00F5D4] disabled:cursor-not-allowed" />
-          <div className="mt-1 flex justify-between text-[10px] text-white/40"><span>0.7 = chậm rãi</span><span>1.0 = bình thường</span><span>1.3 = nhanh</span></div>
+          <input id="speech-rate" disabled={!replaceVoice} type="range" min={0.7} max={1.2} step={0.1} value={speechRate} onChange={event => setSpeechRate(Number(event.target.value))} className="h-2 w-full cursor-pointer accent-[#00F5D4] disabled:cursor-not-allowed" />
+          <div className="mt-1 flex justify-between text-[10px] text-white/40"><span>0.7 = chậm rãi</span><span>1.0 = bình thường</span><span>1.2 = nhanh</span></div>
         </div>
       </section>
 

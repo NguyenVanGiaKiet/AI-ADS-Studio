@@ -10,11 +10,9 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -22,121 +20,105 @@ import (
 )
 
 type TTSService struct {
-	AudioDir   string
-	ModelDir   string
-	Executable string
-	GroqAPIKey string
-	GroqModel  string
+	AudioDir        string
+	GroqAPIKey      string
+	GroqModel       string
+	ElevenLabsKey   string
+	ElevenLabsModel string
 }
 
 func NewTTSService(audioDir string) *TTSService {
 	_ = os.MkdirAll(audioDir, 0755)
-	modelDir := os.Getenv("PIPER_MODEL_DIR")
-	if modelDir == "" {
-		modelDir = "models"
-		if _, err := os.Stat(modelDir); err != nil {
-			if _, rootErr := os.Stat(filepath.Join("backend", modelDir)); rootErr == nil {
-				modelDir = filepath.Join("backend", modelDir)
-			}
-		}
-	}
-	executable := os.Getenv("PIPER_EXECUTABLE")
-	if executable == "" {
-		executable = findPiperExecutable()
-	}
 	groqModel := os.Getenv("GROQ_MODEL")
 	if groqModel == "" {
 		groqModel = "qwen/qwen3.8-27b"
 	}
+	elevenLabsModel := os.Getenv("ELEVENLABS_MODEL_ID")
+	if elevenLabsModel == "" {
+		elevenLabsModel = "eleven_multilingual_v2"
+	}
 	return &TTSService{
-		AudioDir:   audioDir,
-		ModelDir:   modelDir,
-		Executable: executable,
-		GroqAPIKey: os.Getenv("GROQ_API_KEY"),
-		GroqModel:  groqModel,
+		AudioDir:        audioDir,
+		GroqAPIKey:      os.Getenv("GROQ_API_KEY"),
+		GroqModel:       groqModel,
+		ElevenLabsKey:   os.Getenv("ELEVENLABS_API_KEY"),
+		ElevenLabsModel: elevenLabsModel,
 	}
 }
 
-func findPiperExecutable() string {
-	if executable, err := exec.LookPath("piper"); err == nil {
-		return executable
+func (s *TTSService) GetVoices() ([]model.VoiceOption, error) {
+	if strings.TrimSpace(s.ElevenLabsKey) == "" {
+		return nil, fmt.Errorf("chưa cấu hình ELEVENLABS_API_KEY trong backend/.env")
 	}
-	if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
-		matches, _ := filepath.Glob(filepath.Join(localAppData, "Programs", "Python", "Python*", "Scripts", "piper.exe"))
-		if len(matches) > 0 {
-			return matches[len(matches)-1]
+	client := &http.Client{Timeout: 20 * time.Second}
+	var voices []model.VoiceOption
+	nextPageToken := ""
+	for page := 0; page < 10; page++ {
+		query := url.Values{"page_size": {"100"}}
+		if nextPageToken != "" {
+			query.Set("next_page_token", nextPageToken)
 		}
-	}
-	return "piper"
-}
-
-func (s *TTSService) GetVoices() []model.VoiceOption {
-	modelPaths, _ := filepath.Glob(filepath.Join(s.ModelDir, "vi_VN-*.onnx"))
-	sort.Strings(modelPaths)
-	voices := make([]model.VoiceOption, 0)
-	for _, modelPath := range modelPaths {
-		modelID := strings.TrimSuffix(filepath.Base(modelPath), filepath.Ext(modelPath))
-		configData, err := os.ReadFile(modelPath + ".json")
+		request, err := http.NewRequest(http.MethodGet, "https://api.elevenlabs.io/v2/voices?"+query.Encode(), nil)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("không thể tạo yêu cầu lấy voice ElevenLabs: %w", err)
 		}
-		var config struct {
-			NumSpeakers int            `json:"num_speakers"`
-			SpeakerMap  map[string]int `json:"speaker_id_map"`
+		request.Header.Set("xi-api-key", s.ElevenLabsKey)
+		response, err := client.Do(request)
+		if err != nil {
+			return nil, fmt.Errorf("không kết nối được ElevenLabs: %w", err)
 		}
-		if json.Unmarshal(configData, &config) != nil {
-			continue
+		body, readErr := io.ReadAll(io.LimitReader(response.Body, 2<<20))
+		response.Body.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("không đọc được danh sách voice ElevenLabs: %w", readErr)
 		}
-		if config.NumSpeakers > 1 {
-			speakerIDs := make([]int, 0, len(config.SpeakerMap))
-			speakerNames := make(map[int]string, len(config.SpeakerMap))
-			for name, id := range config.SpeakerMap {
-				speakerIDs = append(speakerIDs, id)
-				speakerNames[id] = name
+		if response.StatusCode < 200 || response.StatusCode >= 300 {
+			return nil, fmt.Errorf("ElevenLabs trả HTTP %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
+		}
+		var result struct {
+			Voices []struct {
+				ID          string            `json:"voice_id"`
+				Name        string            `json:"name"`
+				Description string            `json:"description"`
+				Labels      map[string]string `json:"labels"`
+			} `json:"voices"`
+			NextPageToken string `json:"next_page_token"`
+		}
+		if err := json.Unmarshal(body, &result); err != nil {
+			return nil, fmt.Errorf("response danh sách voice ElevenLabs không hợp lệ: %w", err)
+		}
+		for _, voice := range result.Voices {
+			if voice.ID == "" || voice.Name == "" {
+				continue
 			}
-			sort.Ints(speakerIDs)
-			for _, id := range speakerIDs {
-				voices = append(voices, model.VoiceOption{
-					ID:          fmt.Sprintf("%s#%d", modelID, id),
-					Name:        fmt.Sprintf("VIVOS · %s", speakerNames[id]),
-					Description: fmt.Sprintf("Giọng tiếng Việt VIVOS, speaker %d", id),
-					Gender:      "Không xác định",
-					Style:       "VIVOS",
-				})
-			}
-			continue
+			voices = append(voices, model.VoiceOption{
+				ID:          voice.ID,
+				Name:        voice.Name,
+				Description: voice.Description,
+				Gender:      voice.Labels["gender"],
+				Style:       voice.Labels["accent"],
+			})
 		}
-		voices = append(voices, model.VoiceOption{
-			ID:          modelID,
-			Name:        modelVoiceName(modelID),
-			Description: "Giọng tiếng Việt từ model Piper local",
-			Gender:      "Không xác định",
-			Style:       modelID,
-		})
+		nextPageToken = result.NextPageToken
+		if nextPageToken == "" {
+			break
+		}
 	}
-	return voices
+	return voices, nil
 }
 
-func modelVoiceName(modelID string) string {
-	switch modelID {
-	case "vi_VN-25hours_single-low":
-		return "25hours · Tiếng Việt"
-	case "vi_VN-vais1000-medium":
-		return "VAI · Tiếng Việt"
-	default:
-		return modelID
-	}
-}
-
-// GeneratePreview creates a real WAV preview using Piper.
+// GeneratePreview creates speech and returns the audio URL and generated script.
 func (s *TTSService) GeneratePreview(req model.TTSPreviewRequest) (*model.TTSPreviewResponse, error) {
 	if req.Text == "" {
 		req.Text = "Sản phẩm đang được giới thiệu"
 	}
 	if req.Voice == "" {
-		voices := s.GetVoices()
+		voices, err := s.GetVoices()
+		if err != nil {
+			return nil, err
+		}
 		if len(voices) == 0 {
-			return nil, fmt.Errorf("chưa cài model Piper tiếng Việt trong %q", s.ModelDir)
+			return nil, fmt.Errorf("tài khoản ElevenLabs chưa có voice nào")
 		}
 		req.Voice = voices[0].ID
 	}
@@ -158,7 +140,7 @@ func (s *TTSService) GeneratePreview(req model.TTSPreviewRequest) (*model.TTSPre
 		AudioURL: audioURL,
 		Text:     script,
 		Voice:    req.Voice,
-		Duration: float64(len([]rune(req.Text))) * 0.075 / req.Rate,
+		Duration: float64(len([]rune(script))) * 0.075 / req.Rate,
 	}, nil
 }
 
@@ -166,69 +148,73 @@ func (s *TTSService) GenerateSpeech(text, voice string, rate float64) (string, e
 	if strings.TrimSpace(text) == "" {
 		return "", fmt.Errorf("speech text is empty")
 	}
+	if strings.TrimSpace(s.ElevenLabsKey) == "" {
+		return "", fmt.Errorf("chưa cấu hình ELEVENLABS_API_KEY trong backend/.env")
+	}
 	if rate <= 0 {
 		rate = 1
 	}
 	if rate < 0.7 {
 		rate = 0.7
-	} else if rate > 1.3 {
-		rate = 1.3
+	} else if rate > 1.2 {
+		rate = 1.2
 	}
 	if voice == "" {
-		available := s.GetVoices()
+		available, err := s.GetVoices()
+		if err != nil {
+			return "", err
+		}
 		if len(available) == 0 {
-			return "", fmt.Errorf("chưa cài model Piper tiếng Việt trong %q", s.ModelDir)
+			return "", fmt.Errorf("tài khoản ElevenLabs chưa có voice nào")
 		}
 		voice = available[0].ID
 	}
-	modelID, speakerText, hasSpeaker := strings.Cut(voice, "#")
-	if filepath.Base(modelID) != modelID || !strings.HasPrefix(modelID, "vi_VN-") {
-		return "", fmt.Errorf("voice không hợp lệ: %q", voice)
-	}
-	modelPath := filepath.Join(s.ModelDir, modelID+".onnx")
-	if _, err := os.Stat(modelPath); err != nil {
-		return "", fmt.Errorf("không tìm thấy model Piper %q", modelID)
-	}
-	args := []string{"--model", modelPath}
-	if hasSpeaker {
-		speakerID, err := strconv.Atoi(speakerText)
-		if err != nil || speakerID < 0 {
-			return "", fmt.Errorf("speaker ID không hợp lệ trong voice %q", voice)
-		}
-		args = append(args, "--speaker", strconv.Itoa(speakerID))
-	}
-
-	hash := md5.Sum([]byte(fmt.Sprintf("%s_%s_%.2f", text, voice, rate)))
-	audioPath := filepath.Join(s.AudioDir, fmt.Sprintf("speech_%s.wav", hex.EncodeToString(hash[:8])))
-	if info, err := os.Stat(audioPath); err == nil && info.Size() > 44 {
+	hash := md5.Sum([]byte(fmt.Sprintf("%s_%s_%s_%.2f", text, voice, s.ElevenLabsModel, rate)))
+	audioPath := filepath.Join(s.AudioDir, fmt.Sprintf("speech_%s.mp3", hex.EncodeToString(hash[:8])))
+	if info, err := os.Stat(audioPath); err == nil && info.Size() > 128 {
 		return audioPath, nil
 	}
-	inputFile, err := os.CreateTemp(s.AudioDir, "speech-input-*.txt")
+	requestBody := struct {
+		Text          string `json:"text"`
+		ModelID       string `json:"model_id"`
+		VoiceSettings struct {
+			Speed float64 `json:"speed"`
+		} `json:"voice_settings"`
+	}{Text: text, ModelID: s.ElevenLabsModel}
+	requestBody.VoiceSettings.Speed = rate
+	payload, err := json.Marshal(requestBody)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("không thể tạo yêu cầu ElevenLabs: %w", err)
 	}
-	inputPath := inputFile.Name()
-	defer os.Remove(inputPath)
-	if _, err := io.WriteString(inputFile, text); err != nil {
-		inputFile.Close()
-		return "", err
-	}
-	if err := inputFile.Close(); err != nil {
-		return "", err
-	}
-	args = append(args, "--input_file", inputPath, "--output_file", audioPath, "--length_scale", strconv.FormatFloat(1/rate, 'f', 3, 64))
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, s.Executable, args...)
-	output, err := cmd.CombinedOutput()
+	endpoint := "https://api.elevenlabs.io/v1/text-to-speech/" + url.PathEscape(voice) + "?output_format=mp3_44100_128"
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		_ = os.Remove(audioPath)
-		return "", fmt.Errorf("Piper không tạo được giọng đọc: %w: %s", err, strings.TrimSpace(string(output)))
+		return "", fmt.Errorf("không thể tạo yêu cầu ElevenLabs: %w", err)
 	}
-	info, err := os.Stat(audioPath)
-	if err != nil || info.Size() <= 44 {
+	request.Header.Set("xi-api-key", s.ElevenLabsKey)
+	request.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 2 * time.Minute}
+	response, err := client.Do(request)
+	if err != nil {
+		return "", fmt.Errorf("không kết nối được ElevenLabs: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+		return "", fmt.Errorf("ElevenLabs trả HTTP %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	audio, err := io.ReadAll(io.LimitReader(response.Body, 64<<20))
+	if err != nil {
+		return "", fmt.Errorf("không đọc được audio ElevenLabs: %w", err)
+	}
+	if len(audio) <= 128 {
+		return "", fmt.Errorf("ElevenLabs trả về audio rỗng hoặc không hợp lệ")
+	}
+	if err := os.WriteFile(audioPath, audio, 0600); err != nil {
 		_ = os.Remove(audioPath)
-		return "", fmt.Errorf("Piper không tạo được WAV hợp lệ: %s", strings.TrimSpace(string(output)))
+		return "", fmt.Errorf("không thể lưu audio ElevenLabs: %w", err)
 	}
 	return audioPath, nil
 }
