@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ACCENTS, API_BASE, fetchApiData, formatDate, formatFileSize, OutputVideo } from './shared';
+import { ACCENTS, API_BASE, apiFetch, fetchApiData, formatDate, formatFileSize, OutputVideo } from './shared';
 
 function getVideoDayKey(createdAt: string) {
   const date = new Date(createdAt);
@@ -57,7 +57,7 @@ export default function CreatedVideosPage({ onNavigateToCreate }: { onNavigateTo
     setIsDownloading(true);
     setDownloadError('');
     try {
-      const response = await fetch(`${API_BASE}/api/videos/download`, {
+      const response = await apiFetch('/api/videos/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ videoIds: filteredVideos.map(video => video.id) }),
@@ -284,6 +284,7 @@ export default function CreatedVideosPage({ onNavigateToCreate }: { onNavigateTo
                         <div className="relative mb-3 overflow-hidden rounded-2xl border-2 border-[#0D0D1A] bg-[#0D0D1A]">
                           <video
                             src={videoSrc}
+                            crossOrigin="use-credentials"
                             controls
                             preload="metadata"
                             className="aspect-[9/16] w-full object-contain"

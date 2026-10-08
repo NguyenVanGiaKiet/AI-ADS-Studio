@@ -26,6 +26,16 @@ Run the Go backend from this directory so its existing relative storage paths re
 go run .
 ```
 
+Copy `backend/.env.example` to `backend/.env` and configure the single administrator account before starting the server:
+
+```dotenv
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=replace-with-a-unique-password-of-at-least-12-characters
+FRONTEND_ORIGINS=http://localhost:5173
+```
+
+The backend refuses to start if the username or password is missing or the password is shorter than 12 characters. The frontend signs in through a protected `HttpOnly` session cookie; sessions expire after 12 hours and are invalidated when the backend restarts. Set `FRONTEND_ORIGINS` to the exact frontend origin(s), comma-separated, when hosting the frontend outside the default Vite URL; these origins are used for credentialed CORS and CSRF checks. For HTTPS, the session cookie is marked `Secure` automatically.
+
 The backend uses `python` by default. Set `PIPER_PYTHON` if Piper is installed under another interpreter, or `PIPER_MODEL_PATH` to select another local Piper model. FFmpeg is required for remixing videos and for adjusting the generated speech rate.
 
 Remix jobs run in a backend worker and continue while navigating between app sections. The frontend keeps the active task ID locally and resumes status polling after a page reload. Completed task outputs can be downloaded together as a ZIP from `GET /api/remix/tasks/{id}/download`. Download the entire output library from `GET /api/videos/download`, or send `POST /api/videos/download` with `{"videoIds":["..."]}` to download only selected videos as a ZIP.

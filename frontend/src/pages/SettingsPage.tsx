@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 
-import { API_BASE, fetchApiData, VoiceOption } from "./shared"
+import { API_BASE, apiFetch, fetchApiData, VoiceOption } from "./shared"
 
 interface HealthResponse {
   status: string
@@ -19,7 +19,7 @@ export default function SettingsPage() {
     setHealthError("")
     setVoiceError("")
     const [healthResult, voiceResult] = await Promise.allSettled([
-      fetch(`${API_BASE}/api/health`).then(async (response) => {
+      apiFetch("/api/health").then(async (response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         return (await response.json()) as HealthResponse
       }),

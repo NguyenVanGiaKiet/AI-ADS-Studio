@@ -18,6 +18,7 @@ import (
 type Handler struct {
 	RemixService *service.RemixService
 	TTSService   *service.TTSService
+	AuthService  *service.AuthService
 }
 
 func NewHandler(remixSvc *service.RemixService, ttsSvc *service.TTSService) *Handler {

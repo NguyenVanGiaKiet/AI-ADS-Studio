@@ -16,6 +16,10 @@ export const BORDER_COLORS = [
 
 export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080"
 
+export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  return fetch(`${API_BASE}${path}`, { ...init, credentials: "include" })
+}
+
 export interface OutputVideo {
   id: string
   taskId: string
@@ -52,7 +56,7 @@ export interface VoiceOption {
 }
 
 export async function fetchApiData<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`)
+  const response = await apiFetch(path)
   if (!response.ok) {
     throw new Error(`Yêu cầu thất bại (HTTP ${response.status})`)
   }

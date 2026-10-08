@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ACCENTS, API_BASE } from './shared';
+import { ACCENTS, API_BASE, apiFetch } from './shared';
 
 type DeduplicationLevel = 'off' | 'light' | 'medium' | 'strong';
 
@@ -232,7 +232,7 @@ export default function RemixVideoPage() {
 
   useEffect(() => {
     let isActive = true;
-    fetch(`${API_BASE}/api/tts/voices`)
+    apiFetch('/api/tts/voices')
       .then(async response => {
         if (!response.ok) throw new Error((await response.text()) || `HTTP ${response.status}`);
         return response.json();
@@ -267,9 +267,9 @@ export default function RemixVideoPage() {
 
     const pollTask = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/remix/tasks/${encodeURIComponent(activeTaskId)}`);
+        const response = await apiFetch(`/api/remix/tasks/${encodeURIComponent(activeTaskId)}`);
         if (response.status === 404) {
-          const outputsResponse = await fetch(`${API_BASE}/api/videos`);
+          const outputsResponse = await apiFetch('/api/videos');
           if (!outputsResponse.ok) throw new Error(`Không tải được video đã tạo (HTTP ${outputsResponse.status})`);
           const outputsJson = await outputsResponse.json();
           const restoredOutputs: OutputVideo[] = Array.isArray(outputsJson.data)
@@ -374,7 +374,7 @@ export default function RemixVideoPage() {
     previewRequestRef.current = controller;
     setIsSpeaking(true);
     try {
-      const res = await fetch(`${API_BASE}/api/tts/preview`, {
+      const res = await apiFetch('/api/tts/preview', {
         method: 'POST',
         signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
@@ -393,7 +393,9 @@ export default function RemixVideoPage() {
       if (controller.signal.aborted) return;
       if (!result.data?.audioUrl) throw new Error('Backend không trả về audio preview.');
       previewAudioRef.current?.pause();
-      const audio = new Audio(`${API_BASE}${result.data.audioUrl}`);
+      const audio = new Audio();
+      audio.crossOrigin = 'use-credentials';
+      audio.src = `${API_BASE}${result.data.audioUrl}`;
       previewAudioRef.current = audio;
       audio.onended = () => {
         if (previewAudioRef.current === audio) {
@@ -446,7 +448,7 @@ export default function RemixVideoPage() {
       const formData = new FormData();
       videos.forEach(file => formData.append('files', file));
 
-      const uploadRes = await fetch(`${API_BASE}/api/upload`, {
+      const uploadRes = await apiFetch('/api/upload', {
         method: 'POST',
         body: formData,
       });
@@ -458,7 +460,7 @@ export default function RemixVideoPage() {
       }
 
       // Step 2: Create Remix Task
-      const taskRes = await fetch(`${API_BASE}/api/remix/tasks`, {
+      const taskRes = await apiFetch('/api/remix/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -742,6 +744,7 @@ export default function RemixVideoPage() {
                 <article key={video.id} className="overflow-hidden rounded-2xl border-2 border-[#FF3AF2]/60 bg-[#0D0D1A]/90">
                   <video
                     src={`${API_BASE}${video.url}`}
+                    crossOrigin="use-credentials"
                     controls
                     preload="metadata"
                     className="aspect-[9/16] max-h-[420px] w-full bg-black object-contain"
