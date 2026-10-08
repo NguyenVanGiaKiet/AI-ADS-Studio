@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { ReactNode } from "react"
 
 import AnalyticsPage from "./pages/AnalyticsPage"
@@ -11,15 +11,16 @@ import CreatedVideosPage from "./pages/CreatedVideosPage"
 import { ACCENTS } from "./pages/shared"
 
 type Tab = "dashboard" | "create" | "videos" | "projects" | "templates" | "analytics" | "settings"
+const ACTIVE_TAB_KEY = "ai-ads-studio:active-tab"
 
 const NAV_ITEMS: { id: Tab; label: string; icon: string }[] = [
-  { id: "dashboard", label: "Dashboard", icon: "⚡" },
+  { id: "dashboard", label: "Tổng quan", icon: "⚡" },
   { id: "create", label: "Remix Video", icon: "🎬" },
   { id: "videos", label: "Video Đã Tạo", icon: "🎞️" },
-  { id: "projects", label: "Projects", icon: "📁" },
-  { id: "templates", label: "Templates", icon: "✨" },
-  { id: "analytics", label: "Analytics", icon: "📊" },
-  { id: "settings", label: "Settings", icon: "⚙️" },
+  { id: "projects", label: "Lịch sử tác vụ", icon: "⚙️" },
+  { id: "templates", label: "Hướng dẫn", icon: "📖" },
+  { id: "analytics", label: "Thống kê", icon: "📊" },
+  { id: "settings", label: "Hệ thống", icon: "🛠️" },
 ]
 
 function Floaties() {
@@ -80,16 +81,16 @@ function Sidebar({ active, onNav }: { active: Tab; onNav: (tab: Tab) => void }) 
               AI ADS Studio
             </div>
             <div className="text-[#00F5D4] text-xs font-bold uppercase tracking-widest">
-              Pro · FREE
+              VIETNAMESE TTS
             </div>
           </div>
         </div>
         <div className="mt-4 bg-[#00F5D4]/10 border-2 border-dashed border-[#00F5D4] rounded-2xl px-4 py-2">
           <div className="text-[#00F5D4] text-xs font-black uppercase tracking-widest">
-            ∞ Unlimited Credits
+            Piper chạy cục bộ
           </div>
           <div className="text-white/60 text-xs mt-0.5">
-            Always free. No catch.
+            Groq dùng riêng để tạo kịch bản.
           </div>
         </div>
       </div>
@@ -137,16 +138,19 @@ function Sidebar({ active, onNav }: { active: Tab; onNav: (tab: Tab) => void }) 
       <div className="px-4 pb-6">
         <div className="rounded-3xl border-4 border-[#FFE600] bg-[#2D1B4E] p-4 shadow-multi-sm">
           <div className="text-[#FFE600] text-xs font-black uppercase tracking-widest animate-wiggle inline-block">
-            🔥 TRENDING
+            🎬 TẠO VIDEO
           </div>
           <div className="font-['Unbounded'] font-black text-sm mt-1 text-white">
-            Bulk from CSV
+            Remix từ video nguồn
           </div>
           <div className="text-white/60 text-xs mt-1">
-            Generate 500 ads in one click using spreadsheet data.
+            Cắt ghép, lồng giọng Việt và xuất video quảng cáo.
           </div>
-          <button className="mt-3 w-full rounded-full border-2 border-[#FFE600] text-[#FFE600] text-xs font-black uppercase tracking-widest py-2 hover:bg-[#FFE600] hover:text-[#0D0D1A] transition-all duration-200">
-            Try Now
+          <button
+            onClick={() => onNav("create")}
+            className="mt-3 w-full rounded-full border-2 border-[#FFE600] text-[#FFE600] text-xs font-black uppercase tracking-widest py-2 hover:bg-[#FFE600] hover:text-[#0D0D1A] transition-all duration-200"
+          >
+            Bắt đầu
           </button>
         </div>
       </div>
@@ -155,27 +159,34 @@ function Sidebar({ active, onNav }: { active: Tab; onNav: (tab: Tab) => void }) 
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>("dashboard")
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const savedTab = window.localStorage.getItem(ACTIVE_TAB_KEY)
+    return NAV_ITEMS.find(item => item.id === savedTab)?.id ?? "dashboard"
+  })
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  useEffect(() => {
+    window.localStorage.setItem(ACTIVE_TAB_KEY, activeTab)
+  }, [activeTab])
 
   const renderActivePage = () => {
     switch (activeTab) {
       case "dashboard":
-        return <DashboardPage />
+        return <DashboardPage onNavigate={setActiveTab} />
       case "create":
         return null
       case "videos":
         return <CreatedVideosPage onNavigateToCreate={() => setActiveTab("create")} />
       case "projects":
-        return <ProjectsPage />
+        return <ProjectsPage onNavigateToCreate={() => setActiveTab("create")} />
       case "templates":
-        return <TemplatesPage />
+        return <TemplatesPage onNavigateToCreate={() => setActiveTab("create")} />
       case "analytics":
         return <AnalyticsPage />
       case "settings":
         return <SettingsPage />
       default:
-        return <DashboardPage />
+        return <DashboardPage onNavigate={setActiveTab} />
     }
   }
 

@@ -76,17 +76,30 @@ func TestGetVoicesIncludesBundledPiperModels(t *testing.T) {
 	for _, voice := range voices {
 		voiceIDs[voice.ID] = true
 	}
-	for _, id := range []string{freeVietnameseVoiceID, "vi-vn-25hours-single", "vi-vn-vivos-0", "vi-vn-vivos-64"} {
+	for _, id := range []string{
+		freeVietnameseVoiceID,
+		"vi-vn-25hours-single",
+		"vi-vn-csa-0",
+		"vi-vn-csa-1",
+		"vi-vn-csa-2",
+		"vi-vn-csa-3",
+		"vi-vn-csa-4",
+	} {
 		if !voiceIDs[id] {
 			t.Errorf("GetVoices() did not include bundled voice %q", id)
 		}
 	}
-	if len(voices) < 67 {
-		t.Errorf("GetVoices() returned %d voices, want at least 67 bundled Piper voices", len(voices))
+	if len(voices) != 7 {
+		t.Errorf("GetVoices() returned %d voices, want exactly 7 bundled Piper voices", len(voices))
+	}
+	for id := range voiceIDs {
+		if strings.HasPrefix(id, "vi-vn-vivos-") {
+			t.Errorf("GetVoices() unexpectedly included removed VIVOS voice %q", id)
+		}
 	}
 }
 
-func TestResolveVoiceUsesSelectedModelAndVivosSpeaker(t *testing.T) {
+func TestResolveVoiceUsesSelectedModelAndRejectsVivos(t *testing.T) {
 	svc := NewTTSService(t.TempDir())
 	svc.VoiceModelPath = filepath.Join("custom", "default-voice.onnx")
 
@@ -98,12 +111,22 @@ func TestResolveVoiceUsesSelectedModelAndVivosSpeaker(t *testing.T) {
 		t.Fatalf("resolveVoice(default) = (%q, %v), want custom model and no speaker ID", modelPath, speakerID)
 	}
 
-	modelPath, speakerID, err = svc.resolveVoice("vi-vn-vivos-17")
-	if err != nil {
-		t.Fatalf("resolveVoice(VIVOS) error = %v", err)
+	for _, voiceID := range []string{"vi-vn-vivos-17", "vi-vn-vivos-0", "vi-vn-vivos-64"} {
+		if _, _, err := svc.resolveVoice(voiceID); err == nil {
+			t.Errorf("resolveVoice(%q) unexpectedly succeeded for removed VIVOS voice", voiceID)
+		}
 	}
-	if filepath.Base(modelPath) != vietnameseVivosModel || speakerID == nil || *speakerID != 17 {
-		t.Fatalf("resolveVoice(VIVOS) = (%q, %v), want VIVOS model and speaker 17", modelPath, speakerID)
+	modelPath, speakerID, err = svc.resolveVoice("vi-vn-csa-3")
+	if err != nil {
+		t.Fatalf("resolveVoice(Piper v3) error = %v", err)
+	}
+	if filepath.Base(modelPath) != vietnameseCSAModel || speakerID == nil || *speakerID != 3 {
+		t.Fatalf("resolveVoice(Piper v3) = (%q, %v), want Piper v3 model and speaker 3", modelPath, speakerID)
+	}
+	for _, voiceID := range []string{"vi-vn-csa-5", "vi-vn-csa-invalid"} {
+		if _, _, err := svc.resolveVoice(voiceID); err == nil {
+			t.Errorf("resolveVoice(%q) unexpectedly succeeded for invalid Piper v3 speaker", voiceID)
+		}
 	}
 }
 
@@ -289,7 +312,15 @@ func TestGenerateSpeechForDurationFitsGeneratedAudio(t *testing.T) {
 	svc.PiperPython = python
 	svc.VoiceModelPath = modelPath
 	const targetDuration = 4.0
-	for _, voiceID := range []string{freeVietnameseVoiceID, "vi-vn-25hours-single", "vi-vn-vivos-17"} {
+	for _, voiceID := range []string{
+		freeVietnameseVoiceID,
+		"vi-vn-25hours-single",
+		"vi-vn-csa-0",
+		"vi-vn-csa-1",
+		"vi-vn-csa-2",
+		"vi-vn-csa-3",
+		"vi-vn-csa-4",
+	} {
 		t.Run(voiceID, func(t *testing.T) {
 			audioPath, err := svc.GenerateSpeechForDuration("Xin chào, đây là lời giới thiệu sản phẩm.", voiceID, 1, targetDuration)
 			if err != nil {

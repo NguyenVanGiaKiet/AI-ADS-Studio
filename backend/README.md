@@ -1,6 +1,6 @@
 # Backend: local Vietnamese TTS
 
-Speech generation runs locally with Piper and bundled Vietnamese models: VAI 1000, 25Hours, and 65 VIVOS speakers. It does not call an external TTS service or require paid TTS credits. Groq is still used to generate the Vietnamese advertisement script, so configure `GROQ_API_KEY` in `backend/.env` for script generation. VAI 1000 is the default voice; VIVOS speaker options are discovered from the bundled model config.
+Speech generation runs locally with Piper and bundled Vietnamese models: VAI 1000, 25Hours, and Piper v3 with five speakers (Ngọc Lan, Minh Anh, Quang Huy, Thu Hà, and Yến Nhi). The Piper v3 model and config are from [CakeByVPBank on Hugging Face](https://huggingface.co/CakeByVPBank/piper-pgl-v4-vi_VN-version39_epoch39) and are listed as MIT licensed by the model publisher. It does not call an external TTS service or require paid TTS credits. Groq is still used to generate the Vietnamese advertisement script, so configure `GROQ_API_KEY` in `backend/.env` for script generation. VAI 1000 is the default voice.
 
 Video remix modes are `standard` (normal cuts), `exclude_faces` (OpenCV samples the video and removes face-positive moments, including a short margin around each detection), and `product_zoom` (zooms into the lower-center area to reduce visible faces; this heuristic does not identify the product itself). Face detection runs locally with OpenCV's frontal-face Haar cascade and may miss profiles, occluded faces, or people whose faces are not visible. Install its runtime with the other Python dependencies below.
 
@@ -28,4 +28,4 @@ go run .
 
 The backend uses `python` by default. Set `PIPER_PYTHON` if Piper is installed under another interpreter, or `PIPER_MODEL_PATH` to select another local Piper model. FFmpeg is required for remixing videos and for adjusting the generated speech rate.
 
-Remix jobs run in a backend worker and continue while navigating between app sections. The frontend keeps the active task ID locally and resumes status polling after a page reload. Completed task outputs can be downloaded together as a ZIP from `GET /api/remix/tasks/{id}/download`.
+Remix jobs run in a backend worker and continue while navigating between app sections. The frontend keeps the active task ID locally and resumes status polling after a page reload. Completed task outputs can be downloaded together as a ZIP from `GET /api/remix/tasks/{id}/download`. Download the entire output library from `GET /api/videos/download`, or send `POST /api/videos/download` with `{"videoIds":["..."]}` to download only selected videos as a ZIP.

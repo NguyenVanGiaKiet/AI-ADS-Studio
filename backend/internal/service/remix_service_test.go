@@ -60,6 +60,72 @@ func TestWriteTaskOutputsZipReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestWriteAllOutputsZip(t *testing.T) {
+	outputDir := t.TempDir()
+	svc := NewRemixService(t.TempDir(), outputDir, nil, nil)
+	for id, filename := range map[string]string{
+		"video-1": "remix_1.mp4",
+		"video-2": "remix_2.mp4",
+	} {
+		if err := os.WriteFile(filepath.Join(outputDir, filename), []byte(id), 0600); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v", filename, err)
+		}
+		svc.outputs[id] = model.OutputVideo{ID: id, Filename: filename}
+	}
+
+	var archiveBytes bytes.Buffer
+	if err := svc.WriteAllOutputsZip(&archiveBytes); err != nil {
+		t.Fatalf("WriteAllOutputsZip() error = %v", err)
+	}
+	archive, err := zip.NewReader(bytes.NewReader(archiveBytes.Bytes()), int64(archiveBytes.Len()))
+	if err != nil {
+		t.Fatalf("zip.NewReader() error = %v", err)
+	}
+	if len(archive.File) != 2 {
+		t.Fatalf("ZIP has %d entries, want 2", len(archive.File))
+	}
+}
+
+func TestWriteAllOutputsZipReturnsNotFound(t *testing.T) {
+	svc := NewRemixService(t.TempDir(), t.TempDir(), nil, nil)
+	if err := svc.WriteAllOutputsZip(&bytes.Buffer{}); !errors.Is(err, ErrOutputsNotFound) {
+		t.Fatalf("WriteAllOutputsZip() error = %v, want ErrOutputsNotFound", err)
+	}
+}
+
+func TestWriteSelectedOutputsZipIncludesOnlyRequestedVideos(t *testing.T) {
+	outputDir := t.TempDir()
+	svc := NewRemixService(t.TempDir(), outputDir, nil, nil)
+	for id, filename := range map[string]string{
+		"video-1": "remix_1.mp4",
+		"video-2": "remix_2.mp4",
+	} {
+		if err := os.WriteFile(filepath.Join(outputDir, filename), []byte(id), 0600); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v", filename, err)
+		}
+		svc.outputs[id] = model.OutputVideo{ID: id, Filename: filename}
+	}
+
+	var archiveBytes bytes.Buffer
+	if err := svc.WriteSelectedOutputsZip([]string{"video-2"}, &archiveBytes); err != nil {
+		t.Fatalf("WriteSelectedOutputsZip() error = %v", err)
+	}
+	archive, err := zip.NewReader(bytes.NewReader(archiveBytes.Bytes()), int64(archiveBytes.Len()))
+	if err != nil {
+		t.Fatalf("zip.NewReader() error = %v", err)
+	}
+	if len(archive.File) != 1 || archive.File[0].Name != "remix_2.mp4" {
+		t.Fatalf("ZIP entries = %#v, want only remix_2.mp4", archive.File)
+	}
+}
+
+func TestWriteSelectedOutputsZipRejectsMissingVideo(t *testing.T) {
+	svc := NewRemixService(t.TempDir(), t.TempDir(), nil, nil)
+	if err := svc.WriteSelectedOutputsZip([]string{"missing"}, &bytes.Buffer{}); !errors.Is(err, ErrOutputVideoNotFound) {
+		t.Fatalf("WriteSelectedOutputsZip() error = %v, want ErrOutputVideoNotFound", err)
+	}
+}
+
 func TestIsDuplicateScriptIgnoresPunctuationAndCase(t *testing.T) {
 	previous := []string{"Xin chào, sản phẩm tuyệt vời!"}
 	if !isDuplicateScript("XIN CHÀO sản phẩm tuyệt vời.", previous) {

@@ -65,6 +65,8 @@ func main() {
 	mux.HandleFunc("GET /api/remix/tasks/{id}", h.GetTaskStatus)
 	mux.HandleFunc("GET /api/remix/tasks", h.GetTasks)
 	mux.HandleFunc("GET /api/videos/{id}/download", h.DownloadOutput)
+	mux.HandleFunc("GET /api/videos/download", h.DownloadAllOutputs)
+	mux.HandleFunc("POST /api/videos/download", h.DownloadSelectedOutputs)
 	mux.HandleFunc("GET /api/videos", h.GetOutputs)
 
 	// Keep transient media outside persistent storage while preserving the API URLs.

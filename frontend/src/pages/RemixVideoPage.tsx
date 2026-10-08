@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
-import { ACCENTS } from './shared';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ACCENTS, API_BASE } from './shared';
 
 type DeduplicationLevel = 'off' | 'light' | 'medium' | 'strong';
 
-const API_BASE = 'http://localhost:8080';
 const ACTIVE_REMIX_TASK_KEY = 'ai-ads-studio:active-remix-task';
 const VOICE_PREVIEW_TEXT = 'AI ADS Studio là nền tảng AI giúp tự động hóa quy trình tạo video quảng cáo chuyên nghiệp từ hình ảnh và thông tin sản phẩm, nhanh chóng, dễ dàng và tiết kiệm chi phí.';
 const ACCEPTED_VIDEO_TYPES = ['mp4', 'mov', 'avi', 'mkv', 'webm'];
@@ -44,6 +43,121 @@ function formatFileSize(size: number) {
     : `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function sourceFileKey(file: File) {
+  return `${file.name}-${file.size}-${file.lastModified}`;
+}
+
+function formatDuration(seconds: number) {
+  const rounded = Math.max(0, Math.round(seconds));
+  return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, '0')}`;
+}
+
+function resolutionLabel(height: number) {
+  const standardHeights = [2160, 1440, 1080, 720, 640, 480, 360, 240];
+  return `${standardHeights.find(value => height >= value) ?? 240}p`;
+}
+
+function SourceVideoRow({
+  file,
+  index,
+  onRemove,
+  onDurationChange,
+}: {
+  file: File;
+  index: number;
+  onRemove: () => void;
+  onDurationChange: (key: string, duration: number) => void;
+}) {
+  const [thumbnail, setThumbnail] = useState('');
+  const [videoDuration, setVideoDuration] = useState<number | null>(null);
+  const [resolution, setResolution] = useState('');
+
+  useEffect(() => {
+    const video = document.createElement('video');
+    const objectUrl = URL.createObjectURL(file);
+    let active = true;
+
+    const captureThumbnail = () => {
+      if (!active || !video.videoWidth || !video.videoHeight) return;
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(96 / video.videoWidth, 96 / video.videoHeight, 1);
+      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+      const context = canvas.getContext('2d');
+      if (!context) return;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      setThumbnail(canvas.toDataURL('image/jpeg', 0.75));
+    };
+
+    const handleMetadata = () => {
+      if (!active) return;
+      if (Number.isFinite(video.duration)) {
+        setVideoDuration(video.duration);
+        onDurationChange(sourceFileKey(file), video.duration);
+      }
+      if (video.videoHeight > 0) setResolution(resolutionLabel(video.videoHeight));
+      if (video.duration > 0) video.currentTime = Math.min(0.1, video.duration / 2);
+    };
+
+    const handleError = () => {
+      if (active) setResolution('—');
+    };
+
+    video.muted = true;
+    video.preload = 'metadata';
+    video.addEventListener('loadedmetadata', handleMetadata);
+    video.addEventListener('seeked', captureThumbnail);
+    video.addEventListener('loadeddata', captureThumbnail);
+    video.addEventListener('error', handleError);
+    video.src = objectUrl;
+    video.load();
+
+    return () => {
+      active = false;
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+      video.removeEventListener('loadedmetadata', handleMetadata);
+      video.removeEventListener('seeked', captureThumbnail);
+      video.removeEventListener('loadeddata', captureThumbnail);
+      video.removeEventListener('error', handleError);
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [file, onDurationChange]);
+
+  return (
+    <div className="flex min-h-[78px] min-w-0 items-center gap-3 rounded-xl border border-[#142338] bg-[#080B14] px-3 py-2">
+      <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-white/10 bg-[#111827]">
+        {thumbnail ? (
+          <img src={thumbnail} alt="" className="size-full object-contain" />
+        ) : (
+          <span className="text-lg" aria-hidden="true">🎞️</span>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-bold text-white/85">{file.name}</p>
+        <p className="mt-1 text-[10px] text-white/40">
+          Video {index + 1}{videoDuration === null ? '' : ` · ${formatDuration(videoDuration)}`}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="text-[11px] text-white/50">{formatFileSize(file.size)}</span>
+        <span className="rounded bg-[#392D10] px-1.5 py-0.5 text-[10px] font-black text-[#FFE600]">
+          {resolution || '…'}
+        </span>
+        <button
+          type="button"
+          aria-label={`Xóa ${file.name}`}
+          onClick={onRemove}
+          className="rounded px-1.5 py-1 text-sm font-bold text-white/35 hover:bg-[#FF3AF2]/15 hover:text-[#FF3AF2]"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function StepTitle({ number, children }: { number: number; children: React.ReactNode }) {
   const accent = ACCENTS[(number - 1) % ACCENTS.length];
 
@@ -78,6 +192,7 @@ const panelClassNames = [
 export default function RemixVideoPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [videos, setVideos] = useState<File[]>([]);
+  const [videoDurations, setVideoDurations] = useState<Record<string, number>>({});
   const [isDragging, setIsDragging] = useState(false);
   const [outputCount, setOutputCount] = useState(5);
   const [duration, setDuration] = useState(30);
@@ -104,6 +219,16 @@ export default function RemixVideoPage() {
   const [outputTaskId, setOutputTaskId] = useState<string | null>(null);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(() => window.localStorage.getItem(ACTIVE_REMIX_TASK_KEY));
   const [isProcessing, setIsProcessing] = useState(() => Boolean(window.localStorage.getItem(ACTIVE_REMIX_TASK_KEY)));
+  const handleDurationChange = useCallback((key: string, videoDuration: number) => {
+    setVideoDurations(current => current[key] === videoDuration
+      ? current
+      : { ...current, [key]: videoDuration });
+  }, []);
+  const totalSourceDuration = videos.reduce(
+    (total, file) => total + (videoDurations[sourceFileKey(file)] ?? 0),
+    0,
+  );
+  const totalSourceSize = videos.reduce((total, file) => total + file.size, 0);
 
   useEffect(() => {
     let isActive = true;
@@ -400,15 +525,27 @@ export default function RemixVideoPage() {
           <p className="mt-1 text-[11px] text-white/40">MP4, MOV, AVI, MKV, WEBM · cần tối thiểu 2 video</p>
         </div>
         {videos.length > 0 && (
-          <div className="mt-3 space-y-2">
+          <div className="mt-4">
+            <p className="mb-2 text-xs font-bold text-white/75">
+              {videos.length} video
+              <span className="font-normal text-white/40">
+                {' '}· {Math.round(totalSourceDuration)} giây phim gốc · {formatFileSize(totalSourceSize)}
+              </span>
+            </p>
+            <div className="max-h-64 space-y-1.5 overflow-y-auto rounded-xl pr-1">
             {videos.map((video, index) => (
-              <div key={`${video.name}-${video.lastModified}`} className="flex items-center gap-3 rounded-2xl border-2 border-[#7B2FFF]/60 bg-[#0D0D1A]/70 px-3 py-2">
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-xl border-2 border-[#00F5D4] bg-[#00F5D4]/10 text-[#00F5D4]" aria-hidden="true">▶</span>
-                <div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-white">{video.name}</p><p className="text-[11px] text-white/40">Video {index + 1} · {formatFileSize(video.size)}</p></div>
-                <button type="button" aria-label={`Xóa ${video.name}`} onClick={() => setVideos(current => current.filter((_, fileIndex) => fileIndex !== index))} className="rounded-full px-3 py-1 text-xs font-bold text-white/50 hover:bg-[#FF3AF2]/15 hover:text-[#FF3AF2]">Xóa</button>
-              </div>
+              <SourceVideoRow
+                key={sourceFileKey(video)}
+                file={video}
+                index={index}
+                onRemove={() => setVideos(current => current.filter((_, fileIndex) => fileIndex !== index))}
+                onDurationChange={handleDurationChange}
+              />
             ))}
+            </div>
+            <div className="mt-2">
             <button type="button" onClick={() => fileInputRef.current?.click()} className="text-xs font-black uppercase tracking-widest text-[#00F5D4] hover:text-[#FFE600]">+ Thêm video</button>
+            </div>
           </div>
         )}
       </section>

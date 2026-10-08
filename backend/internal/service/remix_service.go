@@ -39,6 +39,8 @@ type RemixService struct {
 }
 
 var ErrTaskOutputsNotFound = errors.New("không tìm thấy video đầu ra cho tiến trình")
+var ErrOutputsNotFound = errors.New("không tìm thấy video đầu ra")
+var ErrOutputVideoNotFound = errors.New("không tìm thấy một hoặc nhiều video đầu ra")
 
 func NewRemixService(uploadDir, outputDir string, ffmpegSvc *FFmpegService, ttsSvc *TTSService) *RemixService {
 	os.MkdirAll(uploadDir, 0755)
@@ -602,6 +604,50 @@ func (s *RemixService) WriteTaskOutputsZip(taskID string, destination io.Writer)
 	if len(outputs) == 0 {
 		return fmt.Errorf("%w %q", ErrTaskOutputsNotFound, taskID)
 	}
+	return s.writeOutputsZip(outputs, destination)
+}
+
+func (s *RemixService) WriteAllOutputsZip(destination io.Writer) error {
+	s.mu.RLock()
+	outputs := make([]model.OutputVideo, 0, len(s.outputs))
+	for _, output := range s.outputs {
+		outputs = append(outputs, output)
+	}
+	s.mu.RUnlock()
+	if len(outputs) == 0 {
+		return ErrOutputsNotFound
+	}
+	return s.writeOutputsZip(outputs, destination)
+}
+
+func (s *RemixService) WriteSelectedOutputsZip(videoIDs []string, destination io.Writer) error {
+	if len(videoIDs) == 0 {
+		return ErrOutputsNotFound
+	}
+
+	s.mu.RLock()
+	outputs := make([]model.OutputVideo, 0, len(videoIDs))
+	seen := make(map[string]struct{}, len(videoIDs))
+	for _, videoID := range videoIDs {
+		if _, duplicate := seen[videoID]; duplicate {
+			continue
+		}
+		seen[videoID] = struct{}{}
+		output, exists := s.outputs[videoID]
+		if !exists {
+			s.mu.RUnlock()
+			return fmt.Errorf("%w: %q", ErrOutputVideoNotFound, videoID)
+		}
+		outputs = append(outputs, output)
+	}
+	s.mu.RUnlock()
+	if len(outputs) == 0 {
+		return ErrOutputsNotFound
+	}
+	return s.writeOutputsZip(outputs, destination)
+}
+
+func (s *RemixService) writeOutputsZip(outputs []model.OutputVideo, destination io.Writer) error {
 	sort.Slice(outputs, func(i, j int) bool {
 		return outputs[i].CreatedAt.Before(outputs[j].CreatedAt)
 	})
@@ -614,7 +660,10 @@ func (s *RemixService) WriteTaskOutputsZip(taskID string, destination io.Writer)
 			_ = archive.Close()
 			return fmt.Errorf("không thể mở video %q để nén: %w", filename, err)
 		}
-		entry, err := archive.Create(filename)
+		entry, err := archive.CreateHeader(&zip.FileHeader{
+			Name:   filename,
+			Method: zip.Store,
+		})
 		if err != nil {
 			_ = input.Close()
 			_ = archive.Close()

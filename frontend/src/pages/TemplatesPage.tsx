@@ -1,111 +1,89 @@
-import { useState } from "react"
+import { ACCENTS } from "./shared"
 
-import { ACCENTS, BORDER_COLORS, TEMPLATES } from "./shared"
+const features = [
+  {
+    title: "Chế độ dựng",
+    icon: "🎞️",
+    description:
+      "Tiêu chuẩn cắt ghép bình thường; loại cảnh có mặt người bằng nhận diện cục bộ; hoặc zoom vùng dưới-trung tâm để hạn chế lộ mặt.",
+    note: "Zoom sản phẩm là heuristic, không tự nhận diện được sản phẩm.",
+  },
+  {
+    title: "Lời thoại và giọng đọc",
+    icon: "🎙️",
+    description:
+      "Nhập thông tin sản phẩm để Groq viết lời quảng cáo; Piper tạo giọng tiếng Việt cục bộ. Có thể chọn VAI 1000, 25Hours hoặc một trong năm giọng Piper v3.",
+    note: "Tạo lời thoại cần cấu hình GROQ_API_KEY ở backend; TTS chạy cục bộ.",
+  },
+  {
+    title: "Phụ đề và thời lượng",
+    icon: "💬",
+    description:
+      "Bật phụ đề karaoke theo lời thoại, chọn vị trí và kiểu hiển thị. Điều chỉnh tốc độ đọc trong khoảng 0,7x–1,3x và thời lượng đầu ra.",
+    note: "Cần bật thay giọng đọc để dùng phụ đề lời thoại.",
+  },
+  {
+    title: "Đầu ra và tải video",
+    icon: "📦",
+    description:
+      "Một tác vụ có thể tạo nhiều phiên bản từ video nguồn. Kiểm tra tiến trình ở Lịch sử tác vụ và xem hoặc tải file trong Video đã tạo.",
+    note: "Ứng dụng chưa có template dựng sẵn hay số liệu hiệu quả mạng xã hội.",
+  },
+]
 
-export default function TemplatesPage() {
-  const [filter, setFilter] = useState("All")
-
-  const categories = [
-    "All",
-    "Social",
-    "Instagram",
-    "YouTube",
-    "Facebook",
-    "Stories",
-    "E-comm",
-  ]
-
+export default function TemplatesPage({
+  onNavigateToCreate,
+}: {
+  onNavigateToCreate: () => void
+}) {
   return (
-    <div className="space-y-8">
-      <div>
-        <div className="text-[#FFE600] text-sm font-black uppercase tracking-widest mb-1">
-          ✨ Library
+    <div className="space-y-8 text-white">
+      <header>
+        <div className="mb-1 text-sm font-black uppercase tracking-widest text-[#FFE600]">
+          ✨ Hướng dẫn sử dụng
         </div>
-        <h1 className="font-['Unbounded'] font-black text-3xl md:text-4xl text-shadow-lg">
-          <span className="gradient-text">Templates</span>
+        <h1 className="font-['Unbounded'] text-3xl font-black md:text-4xl">
+          Tạo video với <span className="gradient-text">AI ADS Studio</span>
         </h1>
-      </div>
-      <div className="flex gap-3 flex-wrap">
-        {categories.map((cat, i) => (
-          <button
-            key={cat}
-            onClick={() => setFilter(cat)}
-            className="rounded-full border-4 px-5 py-2 font-black text-xs uppercase tracking-widest transition-all duration-200 hover:scale-105"
+        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/60">
+          Đây là hướng dẫn theo đúng các chức năng đang có trong ứng dụng, không
+          phải thư viện template hoặc dữ liệu mẫu.
+        </p>
+      </header>
+
+      <ol className="grid gap-5 md:grid-cols-2">
+        {features.map((feature, index) => (
+          <li
+            key={feature.title}
+            className="rounded-3xl border-4 bg-[#2D1B4E] p-6"
             style={{
-              borderColor:
-                filter === cat ? ACCENTS[i % 5] : "rgba(255,255,255,0.15)",
-              background:
-                filter === cat ? `${ACCENTS[i % 5]}22` : "transparent",
-              color: filter === cat ? ACCENTS[i % 5] : "rgba(255,255,255,0.5)",
+              borderColor: ACCENTS[index],
+              boxShadow: `7px 7px 0 ${ACCENTS[(index + 1) % ACCENTS.length]}`,
             }}
           >
-            {cat}
-          </button>
-        ))}
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-        {TEMPLATES.filter((t) => filter === "All" || t.category === filter).map(
-          (t, i) => (
-            <div
-              key={t.name}
-              className={`group relative rounded-3xl border-4 ${BORDER_COLORS[i % 5]} bg-[#2D1B4E] p-5 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.04] hover:-rotate-1 ${
-                i % 2 === 1 ? "translate-y-4" : ""
-              }`}
-              style={{ boxShadow: `8px 8px 0 ${ACCENTS[(i + 1) % 5]}` }}
-            >
-              <div
-                className="pointer-events-none absolute inset-0 pattern-stripes opacity-[0.06]"
-                aria-hidden="true"
-              />
-              {t.hot && (
-                <span className="absolute top-3 right-3 text-xs font-black bg-[#FF3AF2] text-[#0D0D1A] rounded-full px-2 py-0.5 border-2 border-[#FFE600]">
-                  🔥
-                </span>
-              )}
-              <div
-                className="w-full aspect-[9/16] max-h-48 rounded-2xl border-2 flex items-center justify-center mb-4 text-4xl transition-transform duration-300 group-hover:scale-110"
-                style={{
-                  borderColor: ACCENTS[i % 5],
-                  background: `linear-gradient(135deg, ${ACCENTS[i % 5]}22, ${ACCENTS[(i + 1) % 5]}22)`,
-                }}
-              >
-                🎬
-              </div>
-              <div
-                className="font-['Unbounded'] font-black text-sm leading-tight"
-                style={{ color: ACCENTS[i % 5] }}
-              >
-                {t.name}
-              </div>
-              <div className="flex gap-2 mt-2 items-center flex-wrap">
-                <span className="text-xs font-bold text-white/40 uppercase tracking-widest">
-                  {t.ratio}
-                </span>
-                <span className="text-xs bg-[#0D0D1A]/60 border border-white/10 rounded-full px-2 py-0.5 text-white/40">
-                  {t.category}
-                </span>
-              </div>
-              <div className="text-xs text-white/40 mt-2">
-                {t.uses.toLocaleString()} uses
-              </div>
-              <button
-                className="mt-3 w-full rounded-full border-2 font-black uppercase tracking-widest text-xs py-2 transition-all duration-200 group-hover:scale-105"
-                style={{ borderColor: ACCENTS[i % 5], color: ACCENTS[i % 5] }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = ACCENTS[i % 5]
-                  e.currentTarget.style.color = "#0D0D1A"
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "transparent"
-                  e.currentTarget.style.color = ACCENTS[i % 5]
-                }}
-              >
-                Use Template
-              </button>
+            <div className="flex items-center gap-3">
+              <span className="text-3xl" aria-hidden="true">{feature.icon}</span>
+              <h2 className="font-['Unbounded'] text-base font-black" style={{ color: ACCENTS[index] }}>
+                {index + 1}. {feature.title}
+              </h2>
             </div>
-          ),
-        )}
-      </div>
+            <p className="mt-4 text-sm leading-relaxed text-white/75">
+              {feature.description}
+            </p>
+            <p className="mt-3 border-t border-dashed border-white/15 pt-3 text-xs leading-relaxed text-white/45">
+              {feature.note}
+            </p>
+          </li>
+        ))}
+      </ol>
+
+      <button
+        type="button"
+        onClick={onNavigateToCreate}
+        className="rounded-full border-4 border-[#FFE600] bg-gradient-to-r from-[#FF3AF2] via-[#7B2FFF] to-[#00F5D4] px-7 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:scale-105"
+      >
+        Bắt đầu remix video
+      </button>
     </div>
   )
 }

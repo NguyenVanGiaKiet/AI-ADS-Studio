@@ -25,11 +25,13 @@ import (
 const (
 	freeVietnameseVoiceID  = "free-vi-vn"
 	vietnameseVoiceModel   = "vi_VN-vais1000-medium.onnx"
-	vietnameseVivosModel   = "vi_VN-vivos-x_low.onnx"
 	vietnamese25HoursModel = "vi_VN-25hours_single-low.onnx"
-	voicePreviewText       = "AI ADS Studio là nền tảng AI giúp tự động hóa quy trình tạo video quảng cáo chuyên nghiệp từ hình ảnh và thông tin sản phẩm, nhanh chóng, dễ dàng và tiết kiệm chi phí."
+	vietnameseCSAModel     = "vi_VN-csa-voice-piper-v3-medium.onnx"
+	voicePreviewText       = "Xin chào, đây là AI ADS Studio, nền tảng AI giúp tự động hóa quy trình tạo video quảng cáo chuyên nghiệp từ hình ảnh và thông tin sản phẩm, nhanh chóng, dễ dàng và tiết kiệm chi phí."
 	voiceCalibrationText   = "Hôm nay chúng ta cùng khám phá sản phẩm mới, tiện lợi và phù hợp cho cả gia đình."
 )
+
+var vietnameseCSASpeakers = []string{"Ngọc Lan", "Minh Anh", "Quang Huy", "Thu Hà", "Yến Nhi"}
 
 type TTSService struct {
 	AudioDir           string
@@ -98,7 +100,7 @@ func freeVietnameseVoice(modelPath string) model.VoiceOption {
 }
 
 func (s *TTSService) GetVoices() ([]model.VoiceOption, error) {
-	voices := make([]model.VoiceOption, 0, 67)
+	voices := make([]model.VoiceOption, 0, 7)
 	primaryModelPath := s.VoiceModelPath
 	if primaryModelPath == "" {
 		primaryModelPath = findBundledVoiceModel()
@@ -123,54 +125,25 @@ func (s *TTSService) GetVoices() ([]model.VoiceOption, error) {
 		return nil, fmt.Errorf("không thể kiểm tra model Piper 25Hours %q: %w", hoursModelPath, err)
 	}
 
-	vivosModelPath := filepath.Join(modelsDir, vietnameseVivosModel)
-	if _, err := os.Stat(vivosModelPath); err == nil {
-		speakers, err := loadPiperSpeakers(vivosModelPath)
-		if err != nil {
-			return nil, err
-		}
-		for index, speaker := range speakers {
+	csaModelPath := filepath.Join(modelsDir, vietnameseCSAModel)
+	if _, err := os.Stat(csaModelPath); err == nil {
+		for speakerID, speakerName := range vietnameseCSASpeakers {
 			voices = append(voices, model.VoiceOption{
-				ID:          fmt.Sprintf("vi-vn-vivos-%d", index),
-				Name:        fmt.Sprintf("VIVOS — Giọng %02d", index+1),
-				Description: fmt.Sprintf("Giọng %s trong model VIVOS tiếng Việt chạy cục bộ.", speaker),
+				ID:          fmt.Sprintf("vi-vn-csa-%d", speakerID),
+				Name:        fmt.Sprintf("Tiếng Việt — %s (Piper v3)", speakerName),
+				Description: "Giọng tiếng Việt Piper v3, chạy cục bộ.",
 				Gender:      "neutral",
 				Style:       "Vietnamese",
 			})
 		}
 	} else if !os.IsNotExist(err) {
-		return nil, fmt.Errorf("không thể kiểm tra model Piper VIVOS %q: %w", vivosModelPath, err)
+		return nil, fmt.Errorf("không thể kiểm tra model Piper v3 %q: %w", csaModelPath, err)
 	}
 
 	if len(voices) == 0 {
 		return nil, fmt.Errorf("không tìm thấy model Piper tiếng Việt; hãy kiểm tra thư mục backend/models")
 	}
 	return voices, nil
-}
-
-func loadPiperSpeakers(modelPath string) ([]string, error) {
-	configPath := modelPath + ".json"
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("không đọc được cấu hình giọng VIVOS %q: %w", configPath, err)
-	}
-	var config struct {
-		SpeakerIDMap map[string]int `json:"speaker_id_map"`
-	}
-	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("cấu hình giọng VIVOS không hợp lệ: %w", err)
-	}
-	if len(config.SpeakerIDMap) == 0 {
-		return nil, fmt.Errorf("model VIVOS không khai báo speaker_id_map")
-	}
-	speakers := make([]string, len(config.SpeakerIDMap))
-	for speaker, id := range config.SpeakerIDMap {
-		if id < 0 || id >= len(speakers) || speakers[id] != "" {
-			return nil, fmt.Errorf("speaker_id_map của VIVOS không hợp lệ")
-		}
-		speakers[id] = speaker
-	}
-	return speakers, nil
 }
 
 func (s *TTSService) resolveVoice(voiceID string) (string, *int, error) {
@@ -184,19 +157,12 @@ func (s *TTSService) resolveVoice(voiceID string) (string, *int, error) {
 		return modelPath, nil, nil
 	case voiceID == "vi-vn-25hours-single":
 		return filepath.Join(modelsDir, vietnamese25HoursModel), nil, nil
-	case strings.HasPrefix(voiceID, "vi-vn-vivos-"):
-		speakerID, err := strconv.Atoi(strings.TrimPrefix(voiceID, "vi-vn-vivos-"))
-		if err != nil {
-			return "", nil, fmt.Errorf("mã giọng VIVOS không hợp lệ: %q", voiceID)
+	case strings.HasPrefix(voiceID, "vi-vn-csa-"):
+		speakerID, err := strconv.Atoi(strings.TrimPrefix(voiceID, "vi-vn-csa-"))
+		if err != nil || speakerID < 0 || speakerID >= len(vietnameseCSASpeakers) {
+			return "", nil, fmt.Errorf("mã giọng Piper v3 không hợp lệ: %q", voiceID)
 		}
-		speakers, err := loadPiperSpeakers(filepath.Join(modelsDir, vietnameseVivosModel))
-		if err != nil {
-			return "", nil, err
-		}
-		if speakerID < 0 || speakerID >= len(speakers) {
-			return "", nil, fmt.Errorf("không tìm thấy giọng VIVOS có mã %d", speakerID)
-		}
-		return filepath.Join(modelsDir, vietnameseVivosModel), &speakerID, nil
+		return filepath.Join(modelsDir, vietnameseCSAModel), &speakerID, nil
 	default:
 		return "", nil, fmt.Errorf("giọng đọc %q không được hỗ trợ; hãy chọn một giọng Piper tiếng Việt", voiceID)
 	}

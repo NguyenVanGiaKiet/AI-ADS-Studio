@@ -139,6 +139,35 @@ func (h *Handler) GetTaskStatus(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DownloadTaskOutputs(w http.ResponseWriter, r *http.Request) {
 	taskID := r.PathValue("id")
+	h.downloadOutputsZip(w, func(destination io.Writer) error {
+		return h.RemixService.WriteTaskOutputsZip(taskID, destination)
+	}, "remix-videos.zip", "Không thể tải các video của tiến trình: ")
+}
+
+func (h *Handler) DownloadAllOutputs(w http.ResponseWriter, r *http.Request) {
+	h.downloadOutputsZip(w, h.RemixService.WriteAllOutputsZip, "all-videos.zip", "Không thể tải hàng loạt video: ")
+}
+
+func (h *Handler) DownloadSelectedOutputs(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		VideoIDs []string `json:"videoIds"`
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Danh sách video tải xuống không hợp lệ: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if len(request.VideoIDs) == 0 {
+		http.Error(w, "Vui lòng chọn ít nhất một video để tải.", http.StatusBadRequest)
+		return
+	}
+
+	h.downloadOutputsZip(w, func(destination io.Writer) error {
+		return h.RemixService.WriteSelectedOutputsZip(request.VideoIDs, destination)
+	}, "filtered-videos.zip", "Không thể tải các video đã lọc: ")
+}
+
+func (h *Handler) downloadOutputsZip(w http.ResponseWriter, writeArchive func(io.Writer) error, filename, errorPrefix string) {
 	temporaryFile, err := os.CreateTemp("", "remix-videos-*.zip")
 	if err != nil {
 		http.Error(w, "Không thể tạo tệp nén video: "+err.Error(), http.StatusInternalServerError)
@@ -147,12 +176,14 @@ func (h *Handler) DownloadTaskOutputs(w http.ResponseWriter, r *http.Request) {
 	defer os.Remove(temporaryFile.Name())
 	defer temporaryFile.Close()
 
-	if err := h.RemixService.WriteTaskOutputsZip(taskID, temporaryFile); err != nil {
+	if err := writeArchive(temporaryFile); err != nil {
 		status := http.StatusInternalServerError
-		if errors.Is(err, service.ErrTaskOutputsNotFound) {
+		if errors.Is(err, service.ErrTaskOutputsNotFound) ||
+			errors.Is(err, service.ErrOutputsNotFound) ||
+			errors.Is(err, service.ErrOutputVideoNotFound) {
 			status = http.StatusNotFound
 		}
-		http.Error(w, "Không thể tải các video của tiến trình: "+err.Error(), status)
+		http.Error(w, errorPrefix+err.Error(), status)
 		return
 	}
 	info, err := temporaryFile.Stat()
@@ -166,7 +197,9 @@ func (h *Handler) DownloadTaskOutputs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", `attachment; filename="remix-videos.zip"`)
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{
+		"filename": filename,
+	}))
 	w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
 	if _, err := io.Copy(w, temporaryFile); err != nil {
 		log.Printf("[Handler] Could not stream task output archive: %v", err)

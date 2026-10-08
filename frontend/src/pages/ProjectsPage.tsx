@@ -1,94 +1,136 @@
-import { ACCENTS, BORDER_COLORS, PROJECTS, StatusBadge } from "./shared"
+import { useEffect, useState } from "react"
 
-export default function ProjectsPage() {
+import {
+  ACCENTS,
+  fetchApiData,
+  formatDate,
+  RemixTask,
+  StatusBadge,
+} from "./shared"
+
+export default function ProjectsPage({
+  onNavigateToCreate,
+}: {
+  onNavigateToCreate: () => void
+}) {
+  const [tasks, setTasks] = useState<RemixTask[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const sortedTasks = [...tasks].sort(
+    (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+  )
+
+  useEffect(() => {
+    let active = true
+    fetchApiData<RemixTask[]>("/api/remix/tasks")
+      .then((data) => {
+        if (active) setTasks(data)
+      })
+      .catch((requestError: unknown) => {
+        if (active) {
+          setError(requestError instanceof Error ? requestError.message : "Không thể tải tác vụ.")
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
   return (
-    <div className="space-y-8">
-      <div className="flex items-end justify-between gap-4 flex-wrap">
+    <div className="space-y-7 text-white">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="text-[#FF6B35] text-sm font-black uppercase tracking-widest mb-1">
-            📁 All Work
+          <div className="mb-1 text-sm font-black uppercase tracking-widest text-[#FF6B35]">
+            ⚙️ Tiến trình xử lý
           </div>
-          <h1 className="font-['Unbounded'] font-black text-3xl text-shadow-lg">
-            <span className="gradient-text">Projects</span>
+          <h1 className="font-['Unbounded'] text-3xl font-black">
+            <span className="gradient-text">Lịch sử tác vụ</span>
           </h1>
+          <p className="mt-2 text-sm text-white/50">
+            Theo dõi các lần remix video do backend hiện tại quản lý.
+          </p>
         </div>
-        <button className="rounded-full border-4 border-[#FFE600] bg-gradient-to-r from-[#FF3AF2] to-[#7B2FFF] text-white font-black uppercase tracking-widest px-7 py-3 text-sm hover:scale-105 transition-all duration-200 animate-pulse-glow">
-          + New Project
+        <button
+          type="button"
+          onClick={onNavigateToCreate}
+          className="rounded-full border-4 border-[#FFE600] bg-gradient-to-r from-[#FF3AF2] to-[#7B2FFF] px-6 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:scale-105"
+        >
+          + Tạo tác vụ mới
         </button>
+      </header>
+
+      <div className="rounded-2xl border border-[#FFE600]/40 bg-[#FFE600]/5 p-4 text-xs leading-relaxed text-white/65">
+        Danh sách này là lịch sử tác vụ trong bộ nhớ backend và có thể được làm
+        mới khi khởi động lại server. Video đã xuất được lưu riêng trong thư
+        viện <strong className="text-[#FFE600]">Video đã tạo</strong>.
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {PROJECTS.map((proj, i) => (
-          <div
-            key={proj.name}
-            className={`relative rounded-3xl border-4 ${BORDER_COLORS[i % 5]} bg-[#2D1B4E] p-6 overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:rotate-1 ${
-              i % 2 === 1 ? "md:translate-y-4" : ""
-            }`}
-            style={{
-              boxShadow: `8px 8px 0 ${ACCENTS[(i + 1) % 5]}, 16px 16px 0 ${ACCENTS[(i + 2) % 5]}`,
-            }}
-          >
-            <div
-              className="pointer-events-none absolute inset-0 pattern-checker opacity-[0.05]"
-              aria-hidden="true"
-            />
-            <div className="relative z-10">
-              <div className="flex items-start justify-between gap-3 mb-4">
-                <div>
-                  <div
-                    className="font-['Unbounded'] font-black text-sm leading-tight"
-                    style={{
-                      color: ACCENTS[i % 5],
-                      textShadow: "1px 1px 0 #0D0D1A",
-                    }}
-                  >
-                    {proj.name}
+
+      {error && (
+        <div className="rounded-2xl border-2 border-[#FF6B35] bg-[#2D1B4E] p-4 text-sm text-[#FFB08E]">
+          Không tải được lịch sử tác vụ: {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="rounded-3xl border-2 border-dashed border-[#7B2FFF]/50 bg-[#2D1B4E] p-10 text-center text-sm text-white/60">
+          Đang tải tác vụ…
+        </div>
+      ) : error ? null : tasks.length === 0 ? (
+        <div className="rounded-3xl border-2 border-dashed border-[#7B2FFF]/50 bg-[#2D1B4E] p-10 text-center">
+          <div className="text-4xl" aria-hidden="true">🧩</div>
+          <h2 className="mt-3 font-['Unbounded'] text-lg font-black">Chưa có tác vụ remix</h2>
+          <p className="mt-2 text-sm text-white/50">
+            Tạo tác vụ đầu tiên từ video nguồn của bạn.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {sortedTasks.map((task, index) => {
+            const outputs = task.outputVideos?.length ?? 0
+            return (
+              <article
+                key={task.id}
+                className="rounded-3xl border-4 bg-[#2D1B4E] p-5"
+                style={{
+                  borderColor: ACCENTS[index % ACCENTS.length],
+                  boxShadow: `6px 6px 0 ${ACCENTS[(index + 1) % ACCENTS.length]}`,
+                }}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="break-all font-['Unbounded'] text-sm font-black text-white">
+                      Tác vụ {task.id.slice(0, 8)}
+                    </h2>
+                    <p className="mt-1 text-xs text-white/45">
+                      Bắt đầu: {formatDate(task.createdAt)}
+                    </p>
                   </div>
-                  <div className="text-white/50 text-xs mt-1">
-                    {proj.done} of {proj.videos} videos
-                  </div>
+                  <StatusBadge status={task.status} />
                 </div>
-                <StatusBadge status={proj.status} />
-              </div>
-              <div className="h-3 rounded-full bg-[#0D0D1A] border border-white/10 overflow-hidden mb-2">
-                <div
-                  className="h-full rounded-full transition-all duration-1000"
-                  style={{
-                    width: `${proj.progress}%`,
-                    background: `linear-gradient(90deg, ${ACCENTS[i % 5]}, ${ACCENTS[(i + 1) % 5]})`,
-                    boxShadow:
-                      proj.progress > 0
-                        ? `0 0 8px ${ACCENTS[i % 5]}88`
-                        : "none",
-                    minWidth: proj.progress > 0 ? "8px" : "0",
-                  }}
-                />
-              </div>
-              <div className="text-xs text-white/40 font-bold text-right">
-                {proj.progress}%
-              </div>
-              <div className="flex gap-3 mt-4">
-                <button
-                  className="flex-1 rounded-full border-2 text-xs font-black uppercase tracking-widest py-2 transition-all duration-200 hover:scale-105"
-                  style={{ borderColor: ACCENTS[i % 5], color: ACCENTS[i % 5] }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = ACCENTS[i % 5]
-                    e.currentTarget.style.color = "#0D0D1A"
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "transparent"
-                    e.currentTarget.style.color = ACCENTS[i % 5]
-                  }}
-                >
-                  Open
-                </button>
-                <button className="rounded-full border-2 border-dashed border-white/20 text-white/40 text-xs font-black uppercase tracking-widest px-4 py-2 hover:border-[#FF3AF2] hover:text-[#FF3AF2] transition-all duration-200">
-                  ···
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+                <p className="mt-4 text-sm text-white/75">
+                  {task.error || task.message || "Chưa có thông tin tiến trình."}
+                </p>
+                <div className="mt-4 h-2 overflow-hidden rounded-full bg-[#0D0D1A]">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-[#FF3AF2] to-[#00F5D4] transition-all"
+                    style={{ width: `${Math.min(100, Math.max(0, task.progress))}%` }}
+                  />
+                </div>
+                <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-white/50">
+                  <span>{Math.min(100, Math.max(0, task.progress))}% · {outputs} video đầu ra</span>
+                  <span>
+                    Yêu cầu {task.request.outputCount} video · {task.request.duration}s
+                    {task.request.replaceVoice ? " · Có thay giọng" : " · Giữ âm thanh"}
+                  </span>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
