@@ -523,24 +523,17 @@ export default function RemixVideoPage() {
             <div className="flex gap-2">
               <select disabled={!replaceVoice || voices.length === 0} className={`${inputClassName} min-w-0 flex-1 disabled:cursor-not-allowed`} value={voice} onChange={event => setVoice(event.target.value)}>
                 {voices.length === 0 && <option value="">Chưa tải được giọng đọc tiếng Việt</option>}
-                {voices.filter(option => !option.id.startsWith('vi-vn-vivos-')).map(option => (
-                  <option key={option.id} value={option.id}>{option.name}</option>
+                {voices.map(option => (
+                  <option key={option.id} value={option.id}>{option.name}{option.gender ? ` — ${option.gender}` : ''}</option>
                 ))}
-                {voices.some(option => option.id.startsWith('vi-vn-vivos-')) && (
-                  <optgroup label="VIVOS — nhiều giọng tiếng Việt">
-                    {voices.filter(option => option.id.startsWith('vi-vn-vivos-')).map(option => (
-                      <option key={option.id} value={option.id}>{option.name}</option>
-                    ))}
-                  </optgroup>
-                )}
               </select>
               <button type="button" disabled={!replaceVoice} onClick={previewVoice} aria-pressed={isSpeaking} className="shrink-0 rounded-full border-2 border-[#FF6B35] bg-[#0D0D1A]/70 px-4 text-xs font-black uppercase tracking-wide text-[#FF6B35] transition hover:bg-[#FF6B35] hover:text-[#0D0D1A] disabled:cursor-not-allowed disabled:opacity-50">{isSpeaking ? '■ Dừng' : '▶ Nghe thử'}</button>
             </div>
-            <span className="mt-1.5 block text-[11px] text-white/40">Bấm để nghe một câu mẫu của giọng đang chọn.</span>
+            <span className="mt-1.5 block text-[11px] text-white/40">Các voice chạy cục bộ, không tốn phí API. Bấm để nghe thử voice đang chọn.</span>
           </Field>
         </div>
         <p className="mt-3 text-[11px] font-bold text-[#FFE600]">
-          Tốc độ được hiệu chuẩn theo giọng đã chọn; kịch bản sẽ được tạo đủ độ dài cho video {duration} giây ở mức {speechRate.toFixed(1)}x.
+          Kịch bản được ước lượng độ dài theo video {duration} giây ở mức {speechRate.toFixed(1)}x; audio sẽ được căn lại sau khi tạo.
         </p>
         <div className="mt-5">
           <div className="mb-2 flex items-center justify-between text-xs font-black uppercase tracking-wide text-[#00F5D4]"><label htmlFor="speech-rate">Tốc độ đọc: {speechRate.toFixed(1)}x</label><span className="text-white/40">0.7x - 1.3x</span></div>

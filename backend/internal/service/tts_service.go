@@ -82,11 +82,16 @@ func findBundledVoiceModel() string {
 	return candidates[0]
 }
 
-func freeVietnameseVoice() model.VoiceOption {
+func freeVietnameseVoice(modelPath string) model.VoiceOption {
+	modelName := strings.TrimSuffix(filepath.Base(modelPath), filepath.Ext(modelPath))
+	name := fmt.Sprintf("Tiếng Việt — %s (Piper, chạy cục bộ)", modelName)
+	if filepath.Base(modelPath) == vietnameseVoiceModel {
+		name = "Tiếng Việt — VAI 1000 (Piper, chạy cục bộ)"
+	}
 	return model.VoiceOption{
 		ID:          freeVietnameseVoiceID,
-		Name:        "Tiếng Việt — VAI 1000 (Piper, chạy cục bộ)",
-		Description: "Giọng tiếng Việt chạy trực tiếp trong backend bằng model Piper có sẵn.",
+		Name:        name,
+		Description: fmt.Sprintf("Giọng tiếng Việt chạy cục bộ bằng model %s.", modelName),
 		Gender:      "neutral",
 		Style:       "Vietnamese",
 	}
@@ -99,7 +104,7 @@ func (s *TTSService) GetVoices() ([]model.VoiceOption, error) {
 		primaryModelPath = findBundledVoiceModel()
 	}
 	if _, err := os.Stat(primaryModelPath); err == nil {
-		voices = append(voices, freeVietnameseVoice())
+		voices = append(voices, freeVietnameseVoice(primaryModelPath))
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("không thể kiểm tra model giọng Piper mặc định %q: %w", primaryModelPath, err)
 	}
@@ -197,7 +202,7 @@ func (s *TTSService) resolveVoice(voiceID string) (string, *int, error) {
 	}
 }
 
-// GeneratePreview creates a local Vietnamese speech preview and its script.
+// GeneratePreview creates a local Vietnamese speech preview.
 func (s *TTSService) GeneratePreview(req model.TTSPreviewRequest) (*model.TTSPreviewResponse, error) {
 	if req.Voice == "" {
 		req.Voice = freeVietnameseVoiceID

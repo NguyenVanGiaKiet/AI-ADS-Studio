@@ -1,6 +1,6 @@
 # Backend: local Vietnamese TTS
 
-Speech generation runs locally with Piper and bundled Vietnamese models: VAI 1000, 25Hours, and 65 VIVOS speakers. It does not call an external TTS service. Groq is still used to generate the Vietnamese advertisement script, so configure `GROQ_API_KEY` in `backend/.env` for script generation. VAI 1000 remains the default voice; VIVOS speaker options are discovered from the bundled model config.
+Speech generation runs locally with Piper and bundled Vietnamese models: VAI 1000, 25Hours, and 65 VIVOS speakers. It does not call an external TTS service or require paid TTS credits. Groq is still used to generate the Vietnamese advertisement script, so configure `GROQ_API_KEY` in `backend/.env` for script generation. VAI 1000 is the default voice; VIVOS speaker options are discovered from the bundled model config.
 
 Video remix modes are `standard` (normal cuts), `exclude_faces` (OpenCV samples the video and removes face-positive moments, including a short margin around each detection), and `product_zoom` (zooms into the lower-center area to reduce visible faces; this heuristic does not identify the product itself). Face detection runs locally with OpenCV's frontal-face Haar cascade and may miss profiles, occluded faces, or people whose faces are not visible. Install its runtime with the other Python dependencies below.
 
@@ -8,13 +8,13 @@ Optional karaoke subtitles are burned into the remixed video when `followSubtitl
 
 To reduce repeated remixes, the backend generates up to five variants by shuffling clip order and choosing different safe trim points. Each candidate is checked against prior output videos using SHA-256 plus sampled, time-aligned frame hashes. If candidates remain above the 60% visual-match threshold, it keeps the least-similar one and adds a warning to the task status. Absolute perceptual uniqueness cannot be guaranteed when the same source footage is reused; use additional source footage for stronger variety.
 
-For each remix with voice replacement, the backend first measures the selected local Piper voice's natural syllables-per-second rate and caches that calibration for the process lifetime. Groq uses the measured rate, target video duration, and selected 0.7x-1.3x speed to write a script sized to fill the video naturally. FFmpeg then applies a final pitch-preserving `atempo` correction and pads/trims to the exact video duration; subtitles are timed over the same narration duration. This avoids relying on a generic speech-rate estimate that can make the voice sound unnaturally slow.
+For each remix with voice replacement, the backend first measures the selected local Piper voice's natural syllables-per-second rate and caches that calibration for the process lifetime. Groq uses the measured rate, target video duration, and selected 0.7x-1.3x speed to write a script sized to fill the video naturally. FFmpeg then applies a final pitch-preserving `atempo` correction and pads/trims to the exact video duration; subtitles are timed over the same narration duration.
 
 When a remix task requests multiple output videos with voice replacement enabled, Groq writes a separate script for each video using a different creative approach and the scripts already generated as context. Piper generates a separate narration for each script, and that same script is used for its video's subtitles. Exact duplicate scripts are retried up to three times; if Groq still repeats one, the task stops rather than silently producing repeated narration.
 
 Script styles: `professional` is a clear, trustworthy ad read; `adam_drama` uses playful everyday drama and light dialogue; `adam_viral` uses fast viral pacing and occasional strong exclamations; `dan_da` uses plain, warm, rustic Vietnamese phrasing. All styles remain constrained to facts supplied in the product description.
 
-Install the Piper runtime into the Python environment used by the backend:
+Install Piper and the Python dependency used for local face detection:
 
 ```powershell
 python -m pip install -r requirements.txt

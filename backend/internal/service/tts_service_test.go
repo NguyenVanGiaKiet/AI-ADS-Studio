@@ -31,7 +31,6 @@ func TestHasCompleteSentenceEnding(t *testing.T) {
 }
 func TestGetVoicesReturnsBundledVietnameseVoice(t *testing.T) {
 	svc := NewTTSService(t.TempDir())
-
 	voices, err := svc.GetVoices()
 	if err != nil {
 		t.Fatalf("GetVoices() unexpected error: %v", err)
@@ -44,6 +43,26 @@ func TestGetVoicesReturnsBundledVietnameseVoice(t *testing.T) {
 	}
 	if !strings.Contains(voices[0].Name, "Piper") {
 		t.Fatalf("GetVoices()[0].Name = %q, want Piper voice label", voices[0].Name)
+	}
+}
+
+func TestGetVoicesUsesConfiguredPiperModelName(t *testing.T) {
+	modelPath := filepath.Join(t.TempDir(), "custom-vietnamese.onnx")
+	if err := os.WriteFile(modelPath, []byte("model"), 0600); err != nil {
+		t.Fatalf("create custom model fixture: %v", err)
+	}
+	svc := NewTTSService(t.TempDir())
+	svc.VoiceModelPath = modelPath
+
+	voices, err := svc.GetVoices()
+	if err != nil {
+		t.Fatalf("GetVoices() error = %v", err)
+	}
+	if len(voices) == 0 {
+		t.Fatal("GetVoices() returned no configured voice")
+	}
+	if !strings.Contains(voices[0].Name, "custom-vietnamese") {
+		t.Fatalf("GetVoices()[0] = %+v, want the configured model name", voices[0])
 	}
 }
 
@@ -130,10 +149,10 @@ func TestScriptStyleDescriptions(t *testing.T) {
 	}
 }
 
-func TestGenerateSpeechRejectsNonLocalVoice(t *testing.T) {
+func TestGenerateSpeechRejectsUnknownVoice(t *testing.T) {
 	svc := NewTTSService(t.TempDir())
 	if _, err := svc.GenerateSpeech("Xin chào.", "remote-voice", 1); err == nil {
-		t.Fatal("GenerateSpeech() expected an error for a non-local voice")
+		t.Fatal("GenerateSpeech() expected an error for a voice that is not bundled")
 	}
 }
 

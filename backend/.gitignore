@@ -7,4 +7,5 @@ storage/outputs/videos.json
 models/*.onnx
 models/*.onnx.json
 .env
+.env.example
 config.env
