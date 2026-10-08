@@ -17,11 +17,13 @@ type RemixRequest struct {
 	VideoIDs           []string `json:"videoIds"`
 	OutputCount        int      `json:"outputCount"`
 	Duration           int      `json:"duration"`
-	AspectRatio        string   `json:"aspectRatio"`
+	CutSensitivity     string   `json:"cutSensitivity"`
 	RemixMode          string   `json:"remixMode"`
 	Deduplication      string   `json:"deduplication"`
 	ReplaceVoice       bool     `json:"replaceVoice"`
 	FollowSubtitles    bool     `json:"followSubtitles"`
+	SubtitlePosition   string   `json:"subtitlePosition"`
+	SubtitleStyle      string   `json:"subtitleStyle"`
 	ProductDescription string   `json:"productDescription"`
 	ScriptStyle        string   `json:"scriptStyle"`
 	Voice              string   `json:"voice"`
@@ -37,6 +39,7 @@ type OutputVideo struct {
 	URL       string    `json:"url"`
 	Duration  int       `json:"duration"`
 	Size      int64     `json:"size"`
+	Script    string    `json:"script,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
@@ -47,6 +50,7 @@ type RemixTask struct {
 	Progress     int           `json:"progress"` // 0 - 100
 	Message      string        `json:"message"`
 	Script       string        `json:"script,omitempty"`
+	Scripts      []string      `json:"scripts,omitempty"`
 	Request      RemixRequest  `json:"request"`
 	OutputVideos []OutputVideo `json:"outputVideos"`
 	Error        string        `json:"error,omitempty"`

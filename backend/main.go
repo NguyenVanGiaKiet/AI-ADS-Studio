@@ -61,8 +61,10 @@ func main() {
 	mux.HandleFunc("GET /api/tts/voices", h.GetVoices)
 	mux.HandleFunc("POST /api/tts/preview", h.PreviewTTS)
 	mux.HandleFunc("POST /api/remix/tasks", h.CreateRemixTask)
+	mux.HandleFunc("GET /api/remix/tasks/{id}/download", h.DownloadTaskOutputs)
 	mux.HandleFunc("GET /api/remix/tasks/{id}", h.GetTaskStatus)
 	mux.HandleFunc("GET /api/remix/tasks", h.GetTasks)
+	mux.HandleFunc("GET /api/videos/{id}/download", h.DownloadOutput)
 	mux.HandleFunc("GET /api/videos", h.GetOutputs)
 
 	// Keep transient media outside persistent storage while preserving the API URLs.

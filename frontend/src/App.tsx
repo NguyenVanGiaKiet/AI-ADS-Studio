@@ -163,7 +163,7 @@ export default function App() {
       case "dashboard":
         return <DashboardPage />
       case "create":
-        return <RemixVideoPage />
+        return null
       case "videos":
         return <CreatedVideosPage onNavigateToCreate={() => setActiveTab("create")} />
       case "projects":
@@ -230,7 +230,10 @@ export default function App() {
       </button>
       <main className="flex-1 min-w-0 flex flex-col z-10">
         <div className="flex-1 p-6 pt-16 md:p-8 md:pt-8 lg:p-10 overflow-y-auto custom-scroll page-scroll">
-          {renderActivePage()}
+          {activeTab !== "create" && renderActivePage()}
+          <div className={activeTab === "create" ? "block" : "hidden"}>
+            <RemixVideoPage />
+          </div>
         </div>
       </main>
     </div>

@@ -4,6 +4,8 @@ import { ACCENTS } from './shared';
 type DeduplicationLevel = 'off' | 'light' | 'medium' | 'strong';
 
 const API_BASE = 'http://localhost:8080';
+const ACTIVE_REMIX_TASK_KEY = 'ai-ads-studio:active-remix-task';
+const VOICE_PREVIEW_TEXT = 'AI ADS Studio là nền tảng AI giúp tự động hóa quy trình tạo video quảng cáo chuyên nghiệp từ hình ảnh và thông tin sản phẩm, nhanh chóng, dễ dàng và tiết kiệm chi phí.';
 const ACCEPTED_VIDEO_TYPES = ['mp4', 'mov', 'avi', 'mkv', 'webm'];
 
 interface OutputVideo {
@@ -14,6 +16,7 @@ interface OutputVideo {
   url: string;
   duration: number;
   size: number;
+  script?: string;
   createdAt: string;
 }
 
@@ -23,6 +26,7 @@ interface RemixTaskResponse {
   progress: number;
   message: string;
   script?: string;
+  scripts?: string[];
   outputVideos?: OutputVideo[];
 }
 
@@ -77,11 +81,13 @@ export default function RemixVideoPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [outputCount, setOutputCount] = useState(5);
   const [duration, setDuration] = useState(30);
-  const [aspectRatio, setAspectRatio] = useState('vertical');
+  const [cutSensitivity, setCutSensitivity] = useState('medium');
   const [remixMode, setRemixMode] = useState('standard');
   const [deduplication, setDeduplication] = useState<DeduplicationLevel>('off');
   const [replaceVoice, setReplaceVoice] = useState(true);
   const [followSubtitles, setFollowSubtitles] = useState(false);
+  const [subtitlePosition, setSubtitlePosition] = useState('bottom');
+  const [subtitleStyle, setSubtitleStyle] = useState('white_yellow');
   const [productDescription, setProductDescription] = useState('');
   const [scriptStyle, setScriptStyle] = useState('professional');
   const [voice, setVoice] = useState('');
@@ -90,11 +96,14 @@ export default function RemixVideoPage() {
   const [notice, setNotice] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewRequestRef = useRef<AbortController | null>(null);
 
   // Backend Task State
-  const [isProcessing, setIsProcessing] = useState(false);
   const [currentTask, setCurrentTask] = useState<RemixTaskResponse | null>(null);
   const [outputVideos, setOutputVideos] = useState<OutputVideo[]>([]);
+  const [outputTaskId, setOutputTaskId] = useState<string | null>(null);
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(() => window.localStorage.getItem(ACTIVE_REMIX_TASK_KEY));
+  const [isProcessing, setIsProcessing] = useState(() => Boolean(window.localStorage.getItem(ACTIVE_REMIX_TASK_KEY)));
 
   useEffect(() => {
     let isActive = true;
@@ -107,16 +116,85 @@ export default function RemixVideoPage() {
         if (!isActive || !Array.isArray(result.data)) return;
         setVoices(result.data);
         setVoice(result.data[0]?.id ?? '');
-        if (result.data.length === 0) setNotice('Tài khoản ElevenLabs chưa có voice khả dụng.');
+        if (result.data.length === 0) setNotice('Chưa có giọng đọc tiếng Việt miễn phí khả dụng.');
       })
       .catch(error => {
         if (isActive) setNotice(`Không tải được danh sách giọng đọc: ${error instanceof Error ? error.message : 'Lỗi kết nối backend'}`);
       });
     return () => {
       isActive = false;
+      previewRequestRef.current?.abort();
       previewAudioRef.current?.pause();
     };
   }, []);
+
+  useEffect(() => {
+    if (!activeTaskId) return;
+
+    let isActive = true;
+    let timeoutId: number | undefined;
+
+    const stopTracking = () => {
+      window.localStorage.removeItem(ACTIVE_REMIX_TASK_KEY);
+      setActiveTaskId(null);
+      setIsProcessing(false);
+    };
+
+    const pollTask = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/remix/tasks/${encodeURIComponent(activeTaskId)}`);
+        if (response.status === 404) {
+          const outputsResponse = await fetch(`${API_BASE}/api/videos`);
+          if (!outputsResponse.ok) throw new Error(`Không tải được video đã tạo (HTTP ${outputsResponse.status})`);
+          const outputsJson = await outputsResponse.json();
+          const restoredOutputs: OutputVideo[] = Array.isArray(outputsJson.data)
+            ? outputsJson.data.filter((video: OutputVideo) => video.taskId === activeTaskId)
+            : [];
+
+          if (isActive && restoredOutputs.length > 0) {
+            setOutputVideos(restoredOutputs);
+            setOutputTaskId(activeTaskId);
+            setNotice('Tiến trình đã hoàn tất trước đó. Đã khôi phục video đầu ra từ thư viện.');
+          } else if (isActive) {
+            setNotice('Không tìm thấy tiến trình đang chạy trên backend. Hãy kiểm tra thư viện video đã tạo.');
+          }
+          if (isActive) stopTracking();
+          return;
+        }
+        if (!response.ok) throw new Error(`Không đọc được tiến trình (HTTP ${response.status})`);
+
+        const result = await response.json();
+        const task: RemixTaskResponse | undefined = result.data;
+        if (!task?.id || task.id !== activeTaskId) throw new Error('Backend trả về trạng thái tiến trình không hợp lệ.');
+        if (!isActive) return;
+
+        setCurrentTask(task);
+        setNotice(task.message);
+        if (task.status === 'completed') {
+          setOutputVideos(task.outputVideos ?? []);
+          setOutputTaskId(task.id);
+          stopTracking();
+          return;
+        }
+        if (task.status === 'failed') {
+          stopTracking();
+          return;
+        }
+      } catch (error) {
+        if (isActive) {
+          setNotice(`Đang chờ kết nối lại để theo dõi tiến trình: ${error instanceof Error ? error.message : 'Lỗi kết nối backend'}`);
+        }
+      }
+
+      if (isActive) timeoutId = window.setTimeout(pollTask, 1200);
+    };
+
+    void pollTask();
+    return () => {
+      isActive = false;
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
+  }, [activeTaskId]);
 
   function addVideos(incomingFiles: FileList | File[]) {
     const incoming = Array.from(incomingFiles);
@@ -156,13 +234,27 @@ export default function RemixVideoPage() {
   }
 
   async function previewVoice() {
+    if (isSpeaking) {
+      previewRequestRef.current?.abort();
+      previewRequestRef.current = null;
+      previewAudioRef.current?.pause();
+      if (previewAudioRef.current) previewAudioRef.current.currentTime = 0;
+      previewAudioRef.current = null;
+      setIsSpeaking(false);
+      setNotice('Đã dừng nghe thử giọng đọc.');
+      return;
+    }
+
+    const controller = new AbortController();
+    previewRequestRef.current = controller;
     setIsSpeaking(true);
     try {
       const res = await fetch(`${API_BASE}/api/tts/preview`, {
         method: 'POST',
+        signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text: productDescription || 'Xin chào, đây là phần nghe thử giọng đọc quảng cáo của bạn.',
+          text: VOICE_PREVIEW_TEXT,
           style: scriptStyle,
           voice,
           rate: speechRate,
@@ -173,20 +265,42 @@ export default function RemixVideoPage() {
         throw new Error((await res.text()) || `HTTP ${res.status}`);
       }
       const result = await res.json();
+      if (controller.signal.aborted) return;
       if (!result.data?.audioUrl) throw new Error('Backend không trả về audio preview.');
       previewAudioRef.current?.pause();
       const audio = new Audio(`${API_BASE}${result.data.audioUrl}`);
       previewAudioRef.current = audio;
-      audio.onended = () => setIsSpeaking(false);
+      audio.onended = () => {
+        if (previewAudioRef.current === audio) {
+          previewAudioRef.current = null;
+          previewRequestRef.current = null;
+          setIsSpeaking(false);
+        }
+      };
       audio.onerror = () => {
-        setIsSpeaking(false);
-        setNotice('Không phát được audio preview do ElevenLabs tạo.');
+        if (previewAudioRef.current === audio) {
+          previewAudioRef.current = null;
+          previewRequestRef.current = null;
+          setIsSpeaking(false);
+          setNotice('Không phát được audio preview do Piper tạo.');
+        }
       };
       await audio.play();
-      setNotice('Đang phát giọng đọc được ElevenLabs tạo trên backend.');
+      if (controller.signal.aborted) {
+        audio.pause();
+        return;
+      }
+      setNotice('Đang phát giọng đọc Piper tiếng Việt chạy cục bộ trên backend.');
     } catch (error) {
-      setIsSpeaking(false);
-      setNotice(`Không thể tạo giọng đọc thử: ${error instanceof Error ? error.message : 'Lỗi không xác định'}`);
+      if (!controller.signal.aborted) {
+        setIsSpeaking(false);
+        setNotice(`Không thể tạo giọng đọc thử: ${error instanceof Error ? error.message : 'Lỗi không xác định'}`);
+      }
+    } finally {
+      if (previewRequestRef.current === controller && !previewAudioRef.current) {
+        previewRequestRef.current = null;
+        setIsSpeaking(false);
+      }
     }
   }
 
@@ -200,6 +314,7 @@ export default function RemixVideoPage() {
     setNotice('Đang kết nối Go Backend & tải lên video nguồn...');
     setCurrentTask(null);
     setOutputVideos([]);
+    setOutputTaskId(null);
 
     try {
       // Step 1: Upload Videos
@@ -225,11 +340,13 @@ export default function RemixVideoPage() {
           videoIds: uploadedVideoIds,
           outputCount,
           duration,
-          aspectRatio,
+          cutSensitivity,
           remixMode,
           deduplication,
           replaceVoice,
           followSubtitles,
+          subtitlePosition,
+          subtitleStyle,
           productDescription,
           scriptStyle,
           voice,
@@ -242,34 +359,11 @@ export default function RemixVideoPage() {
       }
 
       const taskJson = await taskRes.json();
-      const taskId = taskJson.data.id;
-      setCurrentTask(taskJson.data);
-
-      // Step 3: Poll Task Status
-      const pollInterval = setInterval(async () => {
-        try {
-          const statusRes = await fetch(`${API_BASE}/api/remix/tasks/${taskId}`);
-          if (statusRes.ok) {
-            const statusJson = await statusRes.json();
-            const taskData: RemixTaskResponse = statusJson.data;
-            setCurrentTask(taskData);
-            setNotice(taskData.message);
-
-            if (taskData.status === 'completed') {
-              clearInterval(pollInterval);
-              setIsProcessing(false);
-              if (taskData.outputVideos) {
-                setOutputVideos(taskData.outputVideos);
-              }
-            } else if (taskData.status === 'failed') {
-              clearInterval(pollInterval);
-              setIsProcessing(false);
-            }
-          }
-        } catch (err) {
-          console.error('Polling error:', err);
-        }
-      }, 800);
+      const task: RemixTaskResponse | undefined = taskJson.data;
+      if (!task?.id) throw new Error('Backend không trả về mã tiến trình remix.');
+      window.localStorage.setItem(ACTIVE_REMIX_TASK_KEY, task.id);
+      setCurrentTask(task);
+      setActiveTaskId(task.id);
 
     } catch (error) {
       setIsProcessing(false);
@@ -344,19 +438,18 @@ export default function RemixVideoPage() {
               }}
             />
           </Field>
-          <Field label="Tỷ lệ khung hình" hint="Độ phân giải & định dạng xuất video">
-            <select className={inputClassName} value={aspectRatio} onChange={event => setAspectRatio(event.target.value)}>
-              <option value="vertical">Dọc — 9:16 (TikTok / Reels / Shorts)</option>
-              <option value="square">Vuông — 1:1</option>
-              <option value="landscape">Ngang — 16:9</option>
-              <option value="portrait">Chân dung — 9:16</option>
+          <Field label="Độ nhạy cắt cảnh" hint="Tốc độ chuyển cảnh của video">
+            <select className={inputClassName} value={cutSensitivity} onChange={event => setCutSensitivity(event.target.value)}>
+              <option value="high">Cao — cảnh ngắn 2,5-5 giây, nhịp nhanh</option>
+              <option value="medium">Trung bình(khuyên dùng) — máy tự chọn</option>
+              <option value="low">Thấp — cảnh dài 8-14 giây, mượt</option>
             </select>
           </Field>
           <Field label="Chế độ Remix">
             <select className={inputClassName} value={remixMode} onChange={event => setRemixMode(event.target.value)}>
               <option value="standard">Tiêu chuẩn — Cắt ghép bình thường</option>
-              <option value="dynamic">Năng động — Nhịp cắt nhanh</option>
-              <option value="story">Kể chuyện — Giữ mạch nội dung</option>
+              <option value="exclude_faces">Thông minh — Cắt bỏ cảnh có mặt người</option>
+              <option value="product_zoom">Thông minh — Zoom cận sản phẩm, bỏ phần mặt</option>
             </select>
           </Field>
         </div>
@@ -377,56 +470,82 @@ export default function RemixVideoPage() {
             ))}
           </div>
           <p className="mt-2 text-[11px] text-white/40">{deduplication === 'off' ? 'Giữ nguyên hình ảnh gốc, không chỉnh gì.' : `Đang chọn mức ${deduplication === 'light' ? 'nhẹ' : deduplication === 'medium' ? 'vừa' : 'mạnh'} để tạo khác biệt giữa các video.`}</p>
+          <p className="mt-1 text-[11px] text-white/40">Backend so sánh khung hình với video đã tạo và thử tối đa 5 biến thể. Nếu vẫn tương tự, hệ thống chọn bản khác biệt nhất và cảnh báo.</p>
         </div>
 
         <div className="mt-5 space-y-3 border-t-2 border-dashed border-[#7B2FFF]/50 pt-4">
           <label className="flex cursor-pointer items-start gap-2.5">
-            <input type="checkbox" checked={replaceVoice} onChange={event => setReplaceVoice(event.target.checked)} className="mt-0.5 size-4 accent-[#00F5D4]" />
-            <span><span className="block text-xs font-black uppercase tracking-wide text-white/75">Thay âm thanh video bằng giọng đọc quảng cáo</span><span className="mt-1 block text-[11px] leading-relaxed text-white/40">ElevenLabs tạo voiceover trên backend rồi FFmpeg ghép vào video.</span></span>
+            <input type="checkbox" checked={replaceVoice} onChange={event => { const enabled = event.target.checked; setReplaceVoice(enabled); if (!enabled) setFollowSubtitles(false); }} className="mt-0.5 size-4 accent-[#00F5D4]" />
+            <span><span className="block text-xs font-black uppercase tracking-wide text-white/75">Thay âm thanh video bằng giọng đọc quảng cáo</span><span className="mt-1 block text-[11px] leading-relaxed text-white/40">Piper tạo giọng tiếng Việt trực tiếp trong backend rồi FFmpeg ghép vào video.</span></span>
           </label>
           <label className="flex cursor-pointer items-start gap-2.5">
-            <input type="checkbox" checked={followSubtitles} onChange={event => setFollowSubtitles(event.target.checked)} className="mt-0.5 size-4 accent-[#FF3AF2]" />
-            <span><span className="block text-xs font-black uppercase tracking-wide text-white/75">Phụ đề chạy theo lời giọng đọc</span><span className="mt-1 block text-[11px] leading-relaxed text-white/40">Chỉ hiển thị video khớp với câu đang đọc. Cần có mô tả sản phẩm (có giọng đọc mới có phụ đề), mỗi video lâu thêm một giây.</span></span>
+            <input type="checkbox" checked={followSubtitles} disabled={!replaceVoice} onChange={event => setFollowSubtitles(event.target.checked)} className="mt-0.5 size-4 accent-[#FF3AF2] disabled:cursor-not-allowed disabled:opacity-50" />
+            <span><span className="block text-xs font-black uppercase tracking-wide text-white/75">Phụ đề chạy theo lời giọng đọc</span><span className="mt-1 block text-[11px] leading-relaxed text-white/40">Ước lượng thời điểm từng tiếng từ kịch bản rồi tô sáng theo giọng đọc. Cần bật giọng đọc thay thế.</span></span>
           </label>
+          {followSubtitles && replaceVoice && (
+            <div className="grid gap-3 rounded-2xl border-2 border-[#FF3AF2]/40 bg-[#0D0D1A]/50 p-3 sm:grid-cols-2">
+              <Field label="Vị trí phụ đề">
+                <select className={inputClassName} value={subtitlePosition} onChange={event => setSubtitlePosition(event.target.value)}>
+                  <option value="bottom">Chữ phía dưới (trên giỏ hàng)</option>
+                  <option value="top">Chữ phía trên (dưới ô tìm kiếm)</option>
+                </select>
+              </Field>
+              <Field label="Kiểu màu phụ đề">
+                <select className={inputClassName} value={subtitleStyle} onChange={event => setSubtitleStyle(event.target.value)}>
+                  <option value="white_yellow">Trắng - vàng (đang đọc sáng vàng)</option>
+                  <option value="white_gray">Trắng - xám (chưa đọc màu xám)</option>
+                </select>
+              </Field>
+            </div>
+          )}
         </div>
       </section>
 
       <section className={`${panelClassNames[2]} ${!replaceVoice ? 'opacity-60' : ''}`}>
         <StepTitle number={3}>AI Voice - Giọng đọc quảng cáo</StepTitle>
         <div className="mb-5 rounded-2xl border-2 border-dashed border-[#00F5D4]/50 bg-[#0D0D1A]/60 px-4 py-3 text-xs leading-relaxed text-white/60">
-          <span className="font-black uppercase tracking-wide text-[#00F5D4]">Cách hoạt động:</span> Nhập mô tả sản phẩm → Groq viết kịch bản → ElevenLabs tạo giọng đọc → FFmpeg ghép vào video. <span className="font-bold text-[#FFE600]">Để trống nếu chỉ muốn cắt ghép video.</span>
+          <span className="font-black uppercase tracking-wide text-[#00F5D4]">Cách hoạt động:</span> Groq viết kịch bản → Piper đọc tiếng Việt bằng model cục bộ → backend tự căn thời lượng lời đọc theo video → FFmpeg ghép vào video. Cần GROQ_API_KEY để viết kịch bản; TTS không cần API key hay kết nối dịch vụ bên ngoài. <span className="font-bold text-[#FFE600]">Để trống nếu chỉ muốn cắt ghép video.</span>
         </div>
         {!replaceVoice && <p className="mb-4 text-xs font-bold text-[#FF6B35]">Đã tắt giọng đọc thay thế trong cài đặt video.</p>}
-        <Field label="Mô tả sản phẩm (càng chi tiết càng tốt)" hint="Nhập tất cả thông tin: tên, đặc điểm, giá, khuyến mãi... AI sẽ tự viết kịch bản.">
+        <Field label="Mô tả sản phẩm (càng chi tiết càng tốt)" hint="Groq dùng mô tả này để viết kịch bản; chỉ nêu thông tin bạn cung cấp.">
           <textarea disabled={!replaceVoice} rows={5} value={productDescription} onChange={event => setProductDescription(event.target.value)} placeholder="VD: Dép nữ quai ngang bản to D07, chất liệu da tổng hợp cao cấp, đế chống trơn, có 2 màu đen và kem, giá 199.000 đồng, mua 2 tặng 1, phù hợp đi làm đi chơi, sản phẩm bán chạy nhất shop..." className={`${inputClassName} min-h-32 resize-y leading-relaxed disabled:cursor-not-allowed`} />
         </Field>
         <div className="mt-5 grid gap-5 sm:grid-cols-2">
           <Field label="Phong cách kịch bản">
             <select disabled={!replaceVoice} className={`${inputClassName} disabled:cursor-not-allowed`} value={scriptStyle} onChange={event => setScriptStyle(event.target.value)}>
               <option value="professional">Tiêu chuẩn — Giọng quảng cáo chuyên nghiệp</option>
-              <option value="friendly">Thân thiện — Gần gũi, tự nhiên</option>
-              <option value="energetic">Năng lượng — Nhanh, bắt tai</option>
-              <option value="storytelling">Kể chuyện — Chậm rãi, truyền cảm</option>
+              <option value="adam_drama">Phong cách Adam — Vui nhộn, drama, xưng anh/chồng</option>
+              <option value="adam_viral">Adam Viral — Adam + cảm thán mạnh (Trời má, Đậu xanh...)</option>
+              <option value="dan_da">Dân Dã Gần Gũi — Giọng miền quê chân chất, mộc mạc</option>
             </select>
           </Field>
           <Field label="Giọng đọc">
             <div className="flex gap-2">
               <select disabled={!replaceVoice || voices.length === 0} className={`${inputClassName} min-w-0 flex-1 disabled:cursor-not-allowed`} value={voice} onChange={event => setVoice(event.target.value)}>
-                {voices.length === 0 && <option value="">Chưa tải được voice ElevenLabs</option>}
-                {voices.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
+                {voices.length === 0 && <option value="">Chưa tải được giọng đọc tiếng Việt</option>}
+                {voices.filter(option => !option.id.startsWith('vi-vn-vivos-')).map(option => (
+                  <option key={option.id} value={option.id}>{option.name}</option>
+                ))}
+                {voices.some(option => option.id.startsWith('vi-vn-vivos-')) && (
+                  <optgroup label="VIVOS — nhiều giọng tiếng Việt">
+                    {voices.filter(option => option.id.startsWith('vi-vn-vivos-')).map(option => (
+                      <option key={option.id} value={option.id}>{option.name}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
-              <button type="button" disabled={!replaceVoice || isSpeaking} onClick={previewVoice} className="shrink-0 rounded-full border-2 border-[#FF6B35] bg-[#0D0D1A]/70 px-4 text-xs font-black uppercase tracking-wide text-[#FF6B35] transition hover:bg-[#FF6B35] hover:text-[#0D0D1A] disabled:cursor-not-allowed disabled:opacity-50">{isSpeaking ? 'Đang phát…' : '▶ Nghe thử'}</button>
+              <button type="button" disabled={!replaceVoice} onClick={previewVoice} aria-pressed={isSpeaking} className="shrink-0 rounded-full border-2 border-[#FF6B35] bg-[#0D0D1A]/70 px-4 text-xs font-black uppercase tracking-wide text-[#FF6B35] transition hover:bg-[#FF6B35] hover:text-[#0D0D1A] disabled:cursor-not-allowed disabled:opacity-50">{isSpeaking ? '■ Dừng' : '▶ Nghe thử'}</button>
             </div>
             <span className="mt-1.5 block text-[11px] text-white/40">Bấm để nghe một câu mẫu của giọng đang chọn.</span>
           </Field>
         </div>
         <p className="mt-3 text-[11px] font-bold text-[#FFE600]">
-          Groq sẽ nhắm khoảng {Math.max(15, Math.round(duration * 2.4 * speechRate))} tiếng cho video {duration} giây ở tốc độ {speechRate.toFixed(1)}x.
+          Tốc độ được hiệu chuẩn theo giọng đã chọn; kịch bản sẽ được tạo đủ độ dài cho video {duration} giây ở mức {speechRate.toFixed(1)}x.
         </p>
         <div className="mt-5">
           <div className="mb-2 flex items-center justify-between text-xs font-black uppercase tracking-wide text-[#00F5D4]"><label htmlFor="speech-rate">Tốc độ đọc: {speechRate.toFixed(1)}x</label><span className="text-white/40">0.7x - 1.3x</span></div>
-          <input id="speech-rate" disabled={!replaceVoice} type="range" min={0.7} max={1.2} step={0.1} value={speechRate} onChange={event => setSpeechRate(Number(event.target.value))} className="h-2 w-full cursor-pointer accent-[#00F5D4] disabled:cursor-not-allowed" />
-          <div className="mt-1 flex justify-between text-[10px] text-white/40"><span>0.7 = chậm rãi</span><span>1.0 = bình thường</span><span>1.2 = nhanh</span></div>
+          <input id="speech-rate" disabled={!replaceVoice} type="range" min={0.7} max={1.3} step={0.1} value={speechRate} onChange={event => setSpeechRate(Number(event.target.value))} className="h-2 w-full cursor-pointer accent-[#00F5D4] disabled:cursor-not-allowed" />
+          <div className="mt-1 flex justify-between text-[10px] text-white/40"><span>0.7 = chậm rãi</span><span>1.0 = bình thường</span><span>1.3 = nhanh</span></div>
         </div>
       </section>
 
@@ -436,7 +555,7 @@ export default function RemixVideoPage() {
           <button type="button" disabled={videos.length < 2 || isProcessing} onClick={startRemix} className="rounded-full border-4 border-[#FFE600] bg-gradient-to-r from-[#FF3AF2] via-[#7B2FFF] to-[#00F5D4] px-6 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40">
             {isProcessing ? 'Đang xử lý trên Server Go...' : 'Bắt đầu tạo video'}
           </button>
-          <button type="button" onClick={() => { setVideos([]); setProductDescription(''); setNotice(''); setCurrentTask(null); setOutputVideos([]); }} className="rounded-full border-4 border-dashed border-[#00F5D4] bg-[#0D0D1A]/50 px-5 py-3 text-xs font-black uppercase tracking-widest text-[#00F5D4] transition hover:bg-[#00F5D4] hover:text-[#0D0D1A]">+ Remix video mới</button>
+          <button type="button" disabled={isProcessing} onClick={() => { setVideos([]); setProductDescription(''); setNotice(''); setCurrentTask(null); setOutputVideos([]); setOutputTaskId(null); }} className="rounded-full border-4 border-dashed border-[#00F5D4] bg-[#0D0D1A]/50 px-5 py-3 text-xs font-black uppercase tracking-widest text-[#00F5D4] transition hover:bg-[#00F5D4] hover:text-[#0D0D1A] disabled:cursor-not-allowed disabled:opacity-40">+ Remix video mới</button>
         </div>
 
         {/* Live Progress Indicator */}
@@ -450,10 +569,17 @@ export default function RemixVideoPage() {
               <div className="h-full bg-gradient-to-r from-[#FF3AF2] via-[#FFE600] to-[#00F5D4] transition-all duration-300" style={{ width: `${currentTask.progress}%` }} />
             </div>
             <p className="mt-2 text-xs text-white/70">{currentTask.message}</p>
-            {currentTask.script && (
+            {(currentTask.scripts?.length || currentTask.script) && (
               <div className="mt-3 border-t border-dashed border-[#00F5D4]/30 pt-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-[#FFE600]">Kịch bản Groq đã viết</p>
-                <p className="mt-1 text-xs leading-relaxed text-white/80">{currentTask.script}</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#FFE600]">Kịch bản Groq ({currentTask.scripts?.length ?? 1})</p>
+                <div className="mt-2 space-y-2">
+                  {(currentTask.scripts ?? [currentTask.script!]).map((script, index) => (
+                    <details key={`${index}-${script.slice(0, 20)}`} className="rounded-xl border border-white/10 bg-white/[0.03] p-2">
+                      <summary className="cursor-pointer text-[11px] font-bold text-[#00F5D4]">Video {index + 1} — kịch bản riêng</summary>
+                      <p className="mt-2 text-xs leading-relaxed text-white/80">{script}</p>
+                    </details>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -466,24 +592,58 @@ export default function RemixVideoPage() {
         {/* Generated Output Videos */}
         {outputVideos.length > 0 && (
           <div className="mt-6 border-t-2 border-dashed border-[#00F5D4]/40 pt-5">
-            <h3 className="font-['Unbounded'] text-base font-black uppercase text-[#FFE600]">🎉 Danh sách Video đã Remix ({outputVideos.length})</h3>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-['Unbounded'] text-base font-black uppercase text-[#FFE600]">🎉 Video đã tạo ({outputVideos.length})</h3>
+                <p className="mt-1 text-xs text-white/50">Xem trước, tải riêng từng video hoặc tải toàn bộ dưới dạng ZIP.</p>
+              </div>
+              {outputTaskId && (
+                <a
+                  href={`${API_BASE}/api/remix/tasks/${encodeURIComponent(outputTaskId)}/download`}
+                  download
+                  className="rounded-full border-2 border-[#FFE600] bg-[#FFE600]/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-[#FFE600] transition hover:bg-[#FFE600] hover:text-[#0D0D1A]"
+                >
+                  Tải tất cả (.zip) ⬇
+                </a>
+              )}
+            </div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {outputVideos.map((video, idx) => (
-                <div key={video.id} className="flex items-center justify-between rounded-2xl border-2 border-[#FF3AF2]/60 bg-[#0D0D1A]/90 p-3">
-                  <div className="min-w-0 pr-2">
-                    <p className="truncate text-xs font-black text-white">{video.title || `Video Remix #${idx + 1}`}</p>
-                    <p className="text-[10px] text-white/50">{video.filename} · {formatFileSize(video.size)}</p>
+                <article key={video.id} className="overflow-hidden rounded-2xl border-2 border-[#FF3AF2]/60 bg-[#0D0D1A]/90">
+                  <video
+                    src={`${API_BASE}${video.url}`}
+                    controls
+                    preload="metadata"
+                    className="aspect-[9/16] max-h-[420px] w-full bg-black object-contain"
+                    aria-label={`Xem trước ${video.title || video.filename}`}
+                  />
+                  <div className="p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-black text-white">{video.title || `Video Remix #${idx + 1}`}</p>
+                        <p className="mt-1 truncate text-[10px] text-white/50">{video.filename}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full border border-[#00F5D4]/60 bg-[#00F5D4]/10 px-2 py-1 text-[9px] font-black uppercase text-[#00F5D4]">Đã tạo</span>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between text-[10px] font-bold text-white/50">
+                      <span>⏱ {video.duration}s</span>
+                      <span>💾 {formatFileSize(video.size)}</span>
+                    </div>
+                    {video.script && (
+                      <details className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-2">
+                        <summary className="cursor-pointer text-[10px] font-bold text-[#FFE600]">Xem kịch bản riêng của video</summary>
+                        <p className="mt-2 text-[11px] leading-relaxed text-white/75">{video.script}</p>
+                      </details>
+                    )}
+                    <a
+                      href={`${API_BASE}/api/videos/${encodeURIComponent(video.id)}/download`}
+                      download={video.filename}
+                      className="mt-3 block rounded-xl border-2 border-[#00F5D4] bg-[#00F5D4]/10 px-3 py-2 text-center text-[10px] font-black uppercase tracking-widest text-[#00F5D4] transition hover:bg-[#00F5D4] hover:text-[#0D0D1A]"
+                    >
+                      Tải video ⬇
+                    </a>
                   </div>
-                  <a
-                    href={`${API_BASE}${video.url}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    download
-                    className="shrink-0 rounded-full border-2 border-[#00F5D4] bg-[#00F5D4]/10 px-3 py-1 text-xs font-black uppercase tracking-wide text-[#00F5D4] hover:bg-[#00F5D4] hover:text-[#0D0D1A]"
-                  >
-                    Tải về ⬇
-                  </a>
-                </div>
+                </article>
               ))}
             </div>
           </div>

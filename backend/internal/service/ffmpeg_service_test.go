@@ -2,6 +2,7 @@ package service
 
 import (
 	"math"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -34,12 +35,22 @@ func TestGenerateRemixVideoConcatenatesAllInputs(t *testing.T) {
 		"square",
 		"off",
 		"",
+		remixModeStandard,
+		SubtitleSettings{},
+		0,
 	)
 	if err != nil {
 		t.Fatalf("GenerateRemixVideo() error = %v", err)
 	}
 	if size == 0 || filepath.Base(outputPath) != filename {
 		t.Fatalf("expected non-empty output video, got filename=%q size=%d", filename, size)
+	}
+	fingerprint, err := service.FingerprintVideo(outputPath)
+	if err != nil {
+		t.Fatalf("FingerprintVideo() error = %v", err)
+	}
+	if len(fingerprint.Frames) == 0 || videoSimilarity(fingerprint, fingerprint) != 1 {
+		t.Fatalf("expected usable fingerprint and exact-video similarity, got %d sampled frames", len(fingerprint.Frames))
 	}
 
 	durationOutput, err := exec.Command(ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", outputPath).Output()
@@ -68,6 +79,9 @@ func TestGenerateRemixVideoConcatenatesAllInputs(t *testing.T) {
 		"square",
 		"off",
 		"",
+		remixModeStandard,
+		SubtitleSettings{},
+		0,
 	)
 	if err != nil {
 		t.Fatalf("GenerateRemixVideo() with shorter limit error = %v", err)
@@ -84,6 +98,175 @@ func TestGenerateRemixVideoConcatenatesAllInputs(t *testing.T) {
 	blueFrame = extractRGBPixel(t, ffmpeg, shortOutputPath, "2.0")
 	if redFrame[0] <= redFrame[2] || blueFrame[2] <= blueFrame[0] {
 		t.Fatalf("short output should include a slice of each source: red RGB=%v, blue RGB=%v", redFrame, blueFrame)
+	}
+
+	_, zoomOutputPath, _, err := service.GenerateRemixVideo(
+		0,
+		"facezoom01234567",
+		[]string{redPath, bluePath},
+		2,
+		"square",
+		"off",
+		"",
+		remixModeProductZoom,
+		SubtitleSettings{},
+		0,
+	)
+	if err != nil {
+		t.Fatalf("GenerateRemixVideo() in product zoom mode error = %v", err)
+	}
+	if _, err := os.Stat(zoomOutputPath); err != nil {
+		t.Fatalf("product zoom output video was not created: %v", err)
+	}
+
+	_, variedOutputPath, _, err := service.GenerateRemixVideo(
+		0,
+		"variant012345678",
+		[]string{redPath, bluePath},
+		2,
+		"square",
+		"off",
+		"",
+		remixModeStandard,
+		SubtitleSettings{},
+		1,
+	)
+	if err != nil {
+		t.Fatalf("GenerateRemixVideo() with a varied candidate error = %v", err)
+	}
+	if _, err := os.Stat(variedOutputPath); err != nil {
+		t.Fatalf("varied candidate video was not created: %v", err)
+	}
+
+	_, faceFilteredOutputPath, _, err := service.GenerateRemixVideo(
+		0,
+		"facefilter012345",
+		[]string{redPath, bluePath},
+		2,
+		"square",
+		"off",
+		"",
+		remixModeExcludeFaces,
+		SubtitleSettings{},
+		0,
+	)
+	if err != nil {
+		t.Fatalf("GenerateRemixVideo() in face exclusion mode error = %v", err)
+	}
+	if _, err := os.Stat(faceFilteredOutputPath); err != nil {
+		t.Fatalf("face-filtered output video was not created: %v", err)
+	}
+
+	_, subtitleOutputPath, _, err := service.GenerateRemixVideo(
+		0,
+		"subtitles0123456",
+		[]string{redPath, bluePath},
+		2,
+		"square",
+		"off",
+		"",
+		remixModeStandard,
+		SubtitleSettings{
+			Text:     "Xin chào, sản phẩm dành cho bạn.",
+			Position: "bottom",
+			Style:    "white_yellow",
+		},
+		0,
+	)
+	if err != nil {
+		t.Fatalf("GenerateRemixVideo() with karaoke subtitles error = %v", err)
+	}
+	if _, err := os.Stat(subtitleOutputPath); err != nil {
+		t.Fatalf("subtitle output video was not created: %v", err)
+	}
+}
+
+func TestBuildKaraokeASSUsesSelectedPositionAndColors(t *testing.T) {
+	tests := []struct {
+		name          string
+		position      string
+		style         string
+		wantAlignment string
+		wantColors    string
+	}{
+		{
+			name:          "bottom white and yellow",
+			position:      "bottom",
+			style:         "white_yellow",
+			wantAlignment: ",2,90,90,400,1",
+			wantColors:    "Style: Karaoke,Arial,64,&H0000FFFF,&H00FFFFFF,",
+		},
+		{
+			name:          "top white and gray",
+			position:      "top",
+			style:         "white_gray",
+			wantAlignment: ",8,90,90,300,1",
+			wantColors:    "Style: Karaoke,Arial,64,&H00FFFFFF,&H00808080,",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := buildKaraokeASS("Xin chào, bạn nhé.", 8, test.position, test.style)
+			if err != nil {
+				t.Fatalf("buildKaraokeASS() error = %v", err)
+			}
+			if !strings.Contains(got, test.wantAlignment) {
+				t.Errorf("ASS subtitles missing position settings %q", test.wantAlignment)
+			}
+			if !strings.Contains(got, test.wantColors) {
+				t.Errorf("ASS subtitles missing color settings %q", test.wantColors)
+			}
+			if !strings.Contains(got, "{\\k") {
+				t.Error("ASS subtitles do not contain karaoke word timings")
+			}
+		})
+	}
+}
+
+func TestVideoSimilarityDetectsExactAndTemporalSimilarity(t *testing.T) {
+	first := VideoFingerprint{Digest: [32]byte{1}, Frames: []uint64{0, ^uint64(0), 0x00000000FFFFFFFF, 0xFFFFFFFF00000000}}
+	exact := VideoFingerprint{Digest: [32]byte{2}, Frames: []uint64{0, ^uint64(0), 0x00000000FFFFFFFF, 0xFFFFFFFF00000000}}
+	if got := videoSimilarity(first, exact); got != 1 {
+		t.Fatalf("videoSimilarity(exact) = %.2f, want 1", got)
+	}
+	reordered := VideoFingerprint{Digest: [32]byte{3}, Frames: []uint64{0xFFFFFFFF00000000, 0x00000000FFFFFFFF, ^uint64(0), 0}}
+	if got := videoSimilarity(first, reordered); got >= 0.6 {
+		t.Fatalf("videoSimilarity(reordered) = %.2f, want less than 0.6", got)
+	}
+	digestDuplicate := VideoFingerprint{Digest: first.Digest}
+	if got := videoSimilarity(digestDuplicate, first); got != 1 {
+		t.Fatalf("videoSimilarity(same exact digest) = %.2f, want 1", got)
+	}
+}
+
+func TestGetFaceFreeSegmentsKeepsVideoWithoutFaces(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	python := os.Getenv("OPENCV_PYTHON")
+	if python == "" {
+		python = os.Getenv("PIPER_PYTHON")
+	}
+	if python == "" {
+		python = "python"
+	}
+	if err := exec.Command(python, "-c", "import cv2").Run(); err != nil {
+		t.Skip("OpenCV is not installed for the Python interpreter")
+	}
+
+	videoPath := filepath.Join(t.TempDir(), "no_faces.mp4")
+	createColorClip(t, ffmpeg, videoPath, "blue")
+	service := NewFFmpegService(t.TempDir())
+	segments, err := service.getFaceFreeSegments(videoPath)
+	if err != nil {
+		t.Fatalf("getFaceFreeSegments() error = %v", err)
+	}
+	if len(segments) != 1 {
+		t.Fatalf("getFaceFreeSegments() returned %d segments, want one full-length safe segment", len(segments))
+	}
+	if math.Abs(segments[0].Start) > 0.01 || math.Abs(segments[0].Duration-2) > 0.1 {
+		t.Fatalf("safe segment = %+v, want start 0 and duration about 2 seconds", segments[0])
 	}
 }
 

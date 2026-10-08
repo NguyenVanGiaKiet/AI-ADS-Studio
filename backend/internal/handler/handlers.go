@@ -2,7 +2,14 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
+	"log"
+	"mime"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
 
 	"ai-ads-studio/backend/internal/model"
 	"ai-ads-studio/backend/internal/service"
@@ -130,6 +137,42 @@ func (h *Handler) GetTaskStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) DownloadTaskOutputs(w http.ResponseWriter, r *http.Request) {
+	taskID := r.PathValue("id")
+	temporaryFile, err := os.CreateTemp("", "remix-videos-*.zip")
+	if err != nil {
+		http.Error(w, "Không thể tạo tệp nén video: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(temporaryFile.Name())
+	defer temporaryFile.Close()
+
+	if err := h.RemixService.WriteTaskOutputsZip(taskID, temporaryFile); err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, service.ErrTaskOutputsNotFound) {
+			status = http.StatusNotFound
+		}
+		http.Error(w, "Không thể tải các video của tiến trình: "+err.Error(), status)
+		return
+	}
+	info, err := temporaryFile.Stat()
+	if err != nil {
+		http.Error(w, "Không thể đọc tệp nén video: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := temporaryFile.Seek(0, io.SeekStart); err != nil {
+		http.Error(w, "Không thể đọc lại tệp nén video: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", `attachment; filename="remix-videos.zip"`)
+	w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
+	if _, err := io.Copy(w, temporaryFile); err != nil {
+		log.Printf("[Handler] Could not stream task output archive: %v", err)
+	}
+}
+
 func (h *Handler) GetTasks(w http.ResponseWriter, r *http.Request) {
 	tasks := h.RemixService.GetTasks()
 	respondJSON(w, http.StatusOK, map[string]any{
@@ -142,6 +185,22 @@ func (h *Handler) GetOutputs(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]any{
 		"data": outputs,
 	})
+}
+
+func (h *Handler) DownloadOutput(w http.ResponseWriter, r *http.Request) {
+	outputID := r.PathValue("id")
+	for _, output := range h.RemixService.GetOutputs() {
+		if output.ID != outputID {
+			continue
+		}
+		filename := filepath.Base(output.Filename)
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{
+			"filename": filename,
+		}))
+		http.ServeFile(w, r, filepath.Join(h.RemixService.OutputDir, filename))
+		return
+	}
+	http.NotFound(w, r)
 }
 
 func respondJSON(w http.ResponseWriter, status int, payload any) {

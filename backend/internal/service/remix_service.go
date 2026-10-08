@@ -1,9 +1,11 @@
 package service
 
 import (
+	"archive/zip"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -17,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"ai-ads-studio/backend/internal/model"
 )
@@ -28,11 +31,14 @@ type RemixService struct {
 	FFmpegService *FFmpegService
 	TTSService    *TTSService
 
-	mu      sync.RWMutex
-	uploads map[string]model.UploadedVideo
-	tasks   map[string]*model.RemixTask
-	outputs map[string]model.OutputVideo
+	mu        sync.RWMutex
+	noveltyMu sync.Mutex
+	uploads   map[string]model.UploadedVideo
+	tasks     map[string]*model.RemixTask
+	outputs   map[string]model.OutputVideo
 }
+
+var ErrTaskOutputsNotFound = errors.New("không tìm thấy video đầu ra cho tiến trình")
 
 func NewRemixService(uploadDir, outputDir string, ffmpegSvc *FFmpegService, ttsSvc *TTSService) *RemixService {
 	os.MkdirAll(uploadDir, 0755)
@@ -214,11 +220,33 @@ func (s *RemixService) CreateTask(req model.RemixRequest) (*model.RemixTask, err
 	if req.Duration <= 0 {
 		req.Duration = 30
 	}
-	if req.AspectRatio == "" {
-		req.AspectRatio = "vertical"
+	if req.CutSensitivity == "" {
+		req.CutSensitivity = "medium"
 	}
 	if req.RemixMode == "" {
 		req.RemixMode = "standard"
+	}
+	switch req.RemixMode {
+	case "standard", "exclude_faces", "product_zoom":
+	default:
+		return nil, fmt.Errorf("chế độ remix không hợp lệ: %q", req.RemixMode)
+	}
+	if req.FollowSubtitles && !req.ReplaceVoice {
+		return nil, fmt.Errorf("phụ đề đồng bộ yêu cầu bật giọng đọc thay thế")
+	}
+	if req.FollowSubtitles {
+		if req.SubtitlePosition == "" {
+			req.SubtitlePosition = "bottom"
+		}
+		if req.SubtitleStyle == "" {
+			req.SubtitleStyle = "white_yellow"
+		}
+		if req.SubtitlePosition != "bottom" && req.SubtitlePosition != "top" {
+			return nil, fmt.Errorf("vị trí phụ đề không hợp lệ: %q", req.SubtitlePosition)
+		}
+		if req.SubtitleStyle != "white_yellow" && req.SubtitleStyle != "white_gray" {
+			return nil, fmt.Errorf("kiểu màu phụ đề không hợp lệ: %q", req.SubtitleStyle)
+		}
 	}
 
 	taskID := generateID()
@@ -272,59 +300,170 @@ func (s *RemixService) processRemixTask(taskID string) {
 	}
 	s.mu.RUnlock()
 
-	var narrationPath string
 	montageDuration := float64(task.Request.Duration)
 	if task.Request.ReplaceVoice {
-		s.updateTaskStatus(taskID, "processing", 25, "Đang viết kịch bản và tạo giọng đọc tiếng Việt...")
 		if s.TTSService == nil {
-			s.updateTaskStatus(taskID, "failed", 25, "Dịch vụ TTS chưa được khởi tạo.")
+			s.updateTaskStatus(taskID, "failed", 20, "Dịch vụ TTS chưa được khởi tạo.")
 			return
 		}
 		var err error
-		montageDuration, err = s.FFmpegService.MontageDuration(inputPaths, task.Request.Duration)
+		montageDuration, err = s.FFmpegService.MontageDurationForMode(inputPaths, task.Request.Duration, task.Request.RemixMode)
 		if err != nil {
-			s.updateTaskStatus(taskID, "failed", 25, fmt.Sprintf("Không thể xác định thời lượng video ghép: %v", err))
-			return
-		}
-		script, err := s.TTSService.GenerateScript(task.Request.ProductDescription, task.Request.ScriptStyle, montageDuration, task.Request.SpeechRate)
-		if err != nil {
-			s.updateTaskStatus(taskID, "failed", 25, fmt.Sprintf("Không thể viết kịch bản bằng Groq: %v", err))
-			return
-		}
-		s.mu.Lock()
-		if currentTask, ok := s.tasks[taskID]; ok {
-			currentTask.Script = script
-		}
-		s.mu.Unlock()
-		narrationPath, err = s.TTSService.GenerateSpeech(script, task.Request.Voice, task.Request.SpeechRate)
-		if err != nil {
-			s.updateTaskStatus(taskID, "failed", 25, fmt.Sprintf("Không thể tạo giọng đọc: %v", err))
+			s.updateTaskStatus(taskID, "failed", 20, fmt.Sprintf("Không thể xác định thời lượng video ghép: %v", err))
 			return
 		}
 	}
 
 	totalOutputs := task.Request.OutputCount
 	var generatedVideos []model.OutputVideo
+	var scripts []string
+	var similarFallbackCount int
+	references := make([]VideoFingerprint, 0)
+	const maxNoveltyAttempts = 5
+	const similarityThreshold = 0.6
 
-	for i := 0; i < totalOutputs; i++ {
-		progressPct := 30 + int(float64(i+1)/float64(totalOutputs)*60.0)
-		msg := fmt.Sprintf("Đang cắt ghép & chống trùng video %d/%d...", i+1, totalOutputs)
-		s.updateTaskStatus(taskID, "processing", progressPct, msg)
-
-		outFilename, outputPath, size, err := s.FFmpegService.GenerateRemixVideo(
-			i,
-			taskID,
-			inputPaths,
-			task.Request.Duration,
-			task.Request.AspectRatio,
-			task.Request.Deduplication,
-			narrationPath,
-		)
-
+	s.noveltyMu.Lock()
+	defer s.noveltyMu.Unlock()
+	s.mu.RLock()
+	referencePaths := make([]string, 0, len(s.outputs))
+	for _, output := range s.outputs {
+		referencePaths = append(referencePaths, filepath.Join(s.OutputDir, output.Filename))
+	}
+	s.mu.RUnlock()
+	for _, referencePath := range referencePaths {
+		if _, err := os.Stat(referencePath); err != nil {
+			continue
+		}
+		fingerprint, err := s.FFmpegService.FingerprintVideo(referencePath)
 		if err != nil {
-			s.updateTaskStatus(taskID, "failed", progressPct, fmt.Sprintf("Lỗi tạo video %d: %v", i+1, err))
+			s.updateTaskStatus(taskID, "failed", 30, fmt.Sprintf("Không thể kiểm tra video đã tạo trước đó %q: %v", filepath.Base(referencePath), err))
 			return
 		}
+		references = append(references, fingerprint)
+	}
+
+	for i := 0; i < totalOutputs; i++ {
+		progressPct := 20 + int(float64(i)/float64(totalOutputs)*70.0)
+		var narrationPath string
+		script := ""
+		if task.Request.ReplaceVoice {
+			s.updateTaskStatus(taskID, "processing", progressPct, fmt.Sprintf("Đang viết kịch bản riêng %d/%d và tạo giọng đọc...", i+1, totalOutputs))
+			var err error
+			script, err = s.TTSService.GenerateDistinctScript(
+				task.Request.ProductDescription,
+				task.Request.ScriptStyle,
+				montageDuration,
+				task.Request.SpeechRate,
+				task.Request.Voice,
+				i+1,
+				scripts,
+			)
+			if err != nil {
+				s.updateTaskStatus(taskID, "failed", progressPct, fmt.Sprintf("Không thể viết kịch bản %d bằng Groq: %v", i+1, err))
+				return
+			}
+
+			if isDuplicateScript(script, scripts) {
+				s.updateTaskStatus(taskID, "failed", progressPct, fmt.Sprintf("Groq đã trả về kịch bản trùng cho video %d; tiến trình dừng để không tạo video có lời thoại lặp.", i+1))
+				return
+			}
+			scripts = append(scripts, script)
+			s.mu.Lock()
+			if currentTask, ok := s.tasks[taskID]; ok {
+				currentTask.Scripts = append([]string(nil), scripts...)
+				if currentTask.Script == "" {
+					currentTask.Script = script
+				}
+			}
+			s.mu.Unlock()
+			narrationPath, err = s.TTSService.GenerateSpeechForDuration(script, task.Request.Voice, task.Request.SpeechRate, montageDuration)
+			if err != nil {
+				s.updateTaskStatus(taskID, "failed", progressPct, fmt.Sprintf("Không thể tạo giọng đọc cho kịch bản %d: %v", i+1, err))
+				return
+			}
+		}
+
+		subtitleSettings := SubtitleSettings{}
+		if task.Request.FollowSubtitles && task.Request.ReplaceVoice {
+			subtitleSettings = SubtitleSettings{
+				Text:     script,
+				Position: task.Request.SubtitlePosition,
+				Style:    task.Request.SubtitleStyle,
+			}
+		}
+		var bestCandidatePath string
+		var bestFingerprint VideoFingerprint
+		bestSimilarity := math.MaxFloat64
+		for attempt := 1; attempt <= maxNoveltyAttempts; attempt++ {
+			msg := fmt.Sprintf("Đang tạo và so sánh phiên bản %d/%d của video %d/%d...", attempt, maxNoveltyAttempts, i+1, totalOutputs)
+			s.updateTaskStatus(taskID, "processing", progressPct, msg)
+			_, candidatePath, _, err := s.FFmpegService.GenerateRemixVideo(
+				i,
+				taskID,
+				inputPaths,
+				task.Request.Duration,
+				task.Request.CutSensitivity,
+				task.Request.Deduplication,
+				narrationPath,
+				task.Request.RemixMode,
+				subtitleSettings,
+				attempt,
+			)
+			if err != nil {
+				if candidatePath != "" {
+					_ = os.Remove(candidatePath)
+				}
+				if bestCandidatePath != "" {
+					_ = os.Remove(bestCandidatePath)
+				}
+				s.updateTaskStatus(taskID, "failed", progressPct, fmt.Sprintf("Lỗi tạo video %d: %v", i+1, err))
+				return
+			}
+			candidateFingerprint, err := s.FFmpegService.FingerprintVideo(candidatePath)
+			if err != nil {
+				_ = os.Remove(candidatePath)
+				if bestCandidatePath != "" {
+					_ = os.Remove(bestCandidatePath)
+				}
+				s.updateTaskStatus(taskID, "failed", progressPct, fmt.Sprintf("Không thể so sánh độ trùng video %d: %v", i+1, err))
+				return
+			}
+			similarity := maxSimilarity(candidateFingerprint, references)
+			if similarity < bestSimilarity {
+				if bestCandidatePath != "" {
+					_ = os.Remove(bestCandidatePath)
+				}
+				bestCandidatePath = candidatePath
+				bestFingerprint = candidateFingerprint
+				bestSimilarity = similarity
+			} else {
+				_ = os.Remove(candidatePath)
+			}
+			if bestSimilarity < similarityThreshold {
+				break
+			}
+		}
+		if bestCandidatePath == "" {
+			s.updateTaskStatus(taskID, "failed", progressPct, fmt.Sprintf("Không tạo được video %d.", i+1))
+			return
+		}
+		outFilename := fmt.Sprintf("remix_%s_%d.mp4", taskID[:8], i+1)
+		outputPath := filepath.Join(s.OutputDir, outFilename)
+		if err := os.Rename(bestCandidatePath, outputPath); err != nil {
+			_ = os.Remove(bestCandidatePath)
+			s.updateTaskStatus(taskID, "failed", progressPct, fmt.Sprintf("Không thể lưu video khác biệt nhất cho video %d: %v", i+1, err))
+			return
+		}
+		info, err := os.Stat(outputPath)
+		if err != nil {
+			s.updateTaskStatus(taskID, "failed", progressPct, fmt.Sprintf("Không thể đọc video đầu ra %d: %v", i+1, err))
+			return
+		}
+		if bestSimilarity >= similarityThreshold {
+			similarFallbackCount++
+		}
+		references = append(references, bestFingerprint)
+		size := info.Size()
 		actualDuration, err := probeDuration(outputPath)
 		if err != nil {
 			s.updateTaskStatus(taskID, "failed", progressPct, fmt.Sprintf("Không thể đọc thời lượng video đầu ra: %v", err))
@@ -335,11 +474,12 @@ func (s *RemixService) processRemixTask(taskID string) {
 		outVid := model.OutputVideo{
 			ID:        generateID(),
 			TaskID:    taskID,
-			Title:     fmt.Sprintf("Remix #%d (%s - %ds)", i+1, task.Request.AspectRatio, actualDurationSeconds),
+			Title:     fmt.Sprintf("Remix #%d (%ds)", i+1, actualDurationSeconds),
 			Filename:  outFilename,
 			URL:       "/storage/outputs/" + outFilename,
 			Duration:  actualDurationSeconds,
 			Size:      size,
+			Script:    script,
 			CreatedAt: time.Now(),
 		}
 
@@ -359,6 +499,9 @@ func (s *RemixService) processRemixTask(taskID string) {
 	task.Status = "completed"
 	task.Progress = 100
 	task.Message = fmt.Sprintf("Hoàn thành! Đã tạo thành công %d video remix.", len(generatedVideos))
+	if similarFallbackCount > 0 {
+		task.Message += fmt.Sprintf(" Cảnh báo: %d video vẫn có thể giống một video đã tạo trước đó sau %d lần thử; video khác biệt nhất đã được chọn.", similarFallbackCount, maxNoveltyAttempts)
+	}
 	task.OutputVideos = generatedVideos
 	task.UpdatedAt = time.Now()
 	s.mu.Unlock()
@@ -375,12 +518,48 @@ func (s *RemixService) updateTaskStatus(taskID, status string, progress int, msg
 	}
 }
 
+func isDuplicateScript(script string, previousScripts []string) bool {
+	normalized := normalizeScript(script)
+	if normalized == "" {
+		return true
+	}
+	for _, previous := range previousScripts {
+		if normalized == normalizeScript(previous) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeScript(script string) string {
+	var normalized strings.Builder
+	needsSpace := false
+	for _, character := range strings.ToLower(script) {
+		if unicode.IsLetter(character) || unicode.IsNumber(character) {
+			if needsSpace && normalized.Len() > 0 {
+				normalized.WriteByte(' ')
+			}
+			normalized.WriteRune(character)
+			needsSpace = false
+		} else {
+			needsSpace = true
+		}
+	}
+	return normalized.String()
+}
+
 // GetTask retrieves a task by ID.
 func (s *RemixService) GetTask(taskID string) (*model.RemixTask, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	t, ok := s.tasks[taskID]
-	return t, ok
+	if !ok {
+		return nil, false
+	}
+	taskCopy := *t
+	taskCopy.Scripts = append([]string(nil), t.Scripts...)
+	taskCopy.OutputVideos = append([]model.OutputVideo(nil), t.OutputVideos...)
+	return &taskCopy, true
 }
 
 // GetTasks returns all tasks.
@@ -389,7 +568,10 @@ func (s *RemixService) GetTasks() []model.RemixTask {
 	defer s.mu.RUnlock()
 	result := make([]model.RemixTask, 0, len(s.tasks))
 	for _, t := range s.tasks {
-		result = append(result, *t)
+		taskCopy := *t
+		taskCopy.Scripts = append([]string(nil), t.Scripts...)
+		taskCopy.OutputVideos = append([]model.OutputVideo(nil), t.OutputVideos...)
+		result = append(result, taskCopy)
 	}
 	return result
 }
@@ -406,4 +588,51 @@ func (s *RemixService) GetOutputs() []model.OutputVideo {
 		return result[i].CreatedAt.After(result[j].CreatedAt)
 	})
 	return result
+}
+
+func (s *RemixService) WriteTaskOutputsZip(taskID string, destination io.Writer) error {
+	s.mu.RLock()
+	outputs := make([]model.OutputVideo, 0)
+	for _, output := range s.outputs {
+		if output.TaskID == taskID {
+			outputs = append(outputs, output)
+		}
+	}
+	s.mu.RUnlock()
+	if len(outputs) == 0 {
+		return fmt.Errorf("%w %q", ErrTaskOutputsNotFound, taskID)
+	}
+	sort.Slice(outputs, func(i, j int) bool {
+		return outputs[i].CreatedAt.Before(outputs[j].CreatedAt)
+	})
+
+	archive := zip.NewWriter(destination)
+	for _, output := range outputs {
+		filename := filepath.Base(output.Filename)
+		input, err := os.Open(filepath.Join(s.OutputDir, filename))
+		if err != nil {
+			_ = archive.Close()
+			return fmt.Errorf("không thể mở video %q để nén: %w", filename, err)
+		}
+		entry, err := archive.Create(filename)
+		if err != nil {
+			_ = input.Close()
+			_ = archive.Close()
+			return fmt.Errorf("không thể thêm video %q vào tệp nén: %w", filename, err)
+		}
+		_, copyErr := io.Copy(entry, input)
+		closeErr := input.Close()
+		if copyErr != nil {
+			_ = archive.Close()
+			return fmt.Errorf("không thể nén video %q: %w", filename, copyErr)
+		}
+		if closeErr != nil {
+			_ = archive.Close()
+			return fmt.Errorf("không thể đóng video %q: %w", filename, closeErr)
+		}
+	}
+	if err := archive.Close(); err != nil {
+		return fmt.Errorf("không thể hoàn tất tệp nén video: %w", err)
+	}
+	return nil
 }
