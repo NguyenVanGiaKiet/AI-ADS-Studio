@@ -63,7 +63,10 @@ export default function DashboardPage({
         <div className="relative z-10 flex flex-col justify-between gap-6 md:flex-row md:items-center">
           <div>
             <div className="mb-2 text-sm font-black uppercase tracking-widest text-[#00F5D4]">
-              🎬 AI ADS STUDIO
+              <span className="inline-flex items-center gap-2">
+                <img src="/ai-ads-studio-logo.png" alt="" className="size-8 rounded-lg object-cover" />
+                AI ADS STUDIO
+              </span>
             </div>
             <h1 className="font-['Unbounded'] text-3xl font-black leading-tight md:text-5xl">
               Tạo video quảng cáo
@@ -71,9 +74,8 @@ export default function DashboardPage({
               <span className="gradient-text">từ video sản phẩm</span>
             </h1>
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/70">
-              Tải video nguồn, chọn cách dựng và tạo lời thoại tiếng Việt với
-              các giọng Piper chạy cục bộ. Theo dõi và tải video đã xuất ngay
-              trong ứng dụng.
+              Tải video nguồn, chọn cách dựng và tạo lời thoại tiếng Việt phù
+              hợp với sản phẩm. Theo dõi và tải video đã xuất ngay trong ứng dụng.
             </p>
           </div>
           <button
@@ -88,8 +90,8 @@ export default function DashboardPage({
 
       {error && (
         <div className="rounded-2xl border-2 border-[#FF6B35] bg-[#2D1B4E] p-4 text-sm text-[#FFB08E]">
-          Không thể tải số liệu từ backend: {error}. Hãy kiểm tra backend Go
-          rồi tải lại trang.
+          Không thể tải số liệu: {error}. Hãy kiểm tra kết nối dịch vụ rồi tải
+          lại trang.
         </div>
       )}
 

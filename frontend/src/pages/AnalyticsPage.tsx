@@ -78,7 +78,7 @@ export default function AnalyticsPage() {
           Số liệu <span className="gradient-text">video đã tạo</span>
         </h1>
         <p className="mt-2 text-sm text-white/50">
-          Thống kê lấy từ video đầu ra và tác vụ backend; không phải lượt xem,
+          Thống kê dựa trên video đã tạo và tiến trình xử lý; không phải lượt xem,
           CTR hay hiệu quả quảng cáo trên các nền tảng.
         </p>
       </header>

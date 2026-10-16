@@ -50,7 +50,7 @@ export default function ProjectsPage({
             <span className="gradient-text">Lịch sử tác vụ</span>
           </h1>
           <p className="mt-2 text-sm text-white/50">
-            Theo dõi các lần remix video do backend hiện tại quản lý.
+            Theo dõi tiến độ các video đang được xử lý.
           </p>
         </div>
         <button
@@ -63,9 +63,9 @@ export default function ProjectsPage({
       </header>
 
       <div className="rounded-2xl border border-[#FFE600]/40 bg-[#FFE600]/5 p-4 text-xs leading-relaxed text-white/65">
-        Danh sách này là lịch sử tác vụ trong bộ nhớ backend và có thể được làm
-        mới khi khởi động lại server. Video đã xuất được lưu riêng trong thư
-        viện <strong className="text-[#FFE600]">Video đã tạo</strong>.
+        Lịch sử tiến trình có thể được làm mới khi dịch vụ khởi động lại. Video
+        đã xuất được lưu riêng trong thư viện{" "}
+        <strong className="text-[#FFE600]">Video đã tạo</strong>.
       </div>
 
       {error && (

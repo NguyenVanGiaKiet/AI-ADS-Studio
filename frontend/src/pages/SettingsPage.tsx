@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 
-import { API_BASE, apiFetch, fetchApiData, VoiceOption } from "./shared"
+import { apiFetch, fetchApiData, VoiceOption } from "./shared"
 
 interface HealthResponse {
   status: string
@@ -63,7 +63,7 @@ export default function SettingsPage() {
             Thiết lập <span className="gradient-text">hệ thống</span>
           </h1>
           <p className="mt-2 text-sm text-white/50">
-            Kiểm tra backend và các giọng Piper hiện được hệ thống nhận diện.
+            Kiểm tra tình trạng dịch vụ và các giọng đọc hiện có.
           </p>
         </div>
         <button
@@ -80,17 +80,17 @@ export default function SettingsPage() {
         <article className="rounded-3xl border-4 border-[#00F5D4] bg-[#2D1B4E] p-6">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-['Unbounded'] text-sm font-black uppercase text-[#00F5D4]">
-              Backend Go
+              Dịch vụ xử lý
             </h2>
             <span className={`rounded-full border px-3 py-1 text-xs font-black ${health ? "border-[#00F5D4] text-[#00F5D4]" : "border-[#FF6B35] text-[#FF6B35]"}`}>
               {loading ? "ĐANG KIỂM TRA" : health ? "ĐANG KẾT NỐI" : "MẤT KẾT NỐI"}
             </span>
           </div>
           <p className="mt-4 text-sm text-white/70">
-            {health?.service ?? "AI ADS Studio Backend"}
+            {health?.service ?? "AI ADS Studio"}
           </p>
           <p className="mt-2 break-all text-xs text-white/40">
-            Endpoint: {API_BASE}/api/health
+            Trạng thái kết nối dịch vụ
           </p>
           {healthError && <p className="mt-3 text-xs text-[#FFB08E]">{healthError}</p>}
         </article>
@@ -100,13 +100,13 @@ export default function SettingsPage() {
             Tạo lời thoại và giọng đọc
           </h2>
           <ul className="mt-4 space-y-3 text-sm leading-relaxed text-white/70">
-            <li><strong className="text-white">Piper TTS:</strong> tạo giọng tiếng Việt cục bộ, không gọi API TTS trả phí.</li>
-            <li><strong className="text-white">Groq:</strong> dùng để sinh kịch bản quảng cáo và cần cấu hình GROQ_API_KEY ở backend.</li>
-            <li><strong className="text-white">FFmpeg:</strong> cần có để dựng video và xử lý thời lượng âm thanh.</li>
+            <li><strong className="text-white">Giọng đọc:</strong> tạo lời thoại tiếng Việt trực tiếp trong ứng dụng.</li>
+            <li><strong className="text-white">Kịch bản:</strong> tự động soạn lời quảng cáo từ thông tin sản phẩm.</li>
+            <li><strong className="text-white">Dựng video:</strong> ghép lời thoại và căn chỉnh âm thanh theo thời lượng.</li>
           </ul>
           <p className="mt-4 border-t border-dashed border-white/15 pt-3 text-xs leading-relaxed text-white/40">
-            Cấu hình nằm ở backend/.env; khóa API không được nhập hoặc hiển thị
-            trong giao diện này.
+            Các thiết lập cần thiết được quản lý an toàn trong hệ thống và không
+            hiển thị trong giao diện này.
           </p>
         </article>
       </section>
@@ -114,7 +114,7 @@ export default function SettingsPage() {
       <section className="rounded-3xl border-4 border-[#FFE600] bg-[#2D1B4E] p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-['Unbounded'] text-sm font-black uppercase text-[#FFE600]">
-            Giọng Piper khả dụng
+            Giọng đọc khả dụng
           </h2>
           <span className="text-xs font-bold text-white/45">
             {loading ? "Đang tải…" : `${voices.length} giọng`}

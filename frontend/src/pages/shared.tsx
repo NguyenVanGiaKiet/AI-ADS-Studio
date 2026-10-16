@@ -14,10 +14,11 @@ export const BORDER_COLORS = [
   "border-[#7B2FFF]",
 ] as const
 
-export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080"
+export const API_BASE = import.meta.env.VITE_API_BASE_URL
+  ?? (import.meta.env.DEV ? "http://localhost:8080" : "")
 
 export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
-  return fetch(`${API_BASE}${path}`, { ...init, credentials: "include" })
+  return fetch(`${API_BASE}${path}`, init)
 }
 
 export interface OutputVideo {

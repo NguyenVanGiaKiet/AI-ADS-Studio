@@ -12,8 +12,8 @@ const features = [
     title: "Lời thoại và giọng đọc",
     icon: "🎙️",
     description:
-      "Nhập thông tin sản phẩm để Groq viết lời quảng cáo; Piper tạo giọng tiếng Việt cục bộ. Có thể chọn VAI 1000, 25Hours hoặc một trong năm giọng Piper v3.",
-    note: "Tạo lời thoại cần cấu hình GROQ_API_KEY ở backend; TTS chạy cục bộ.",
+      "Nhập thông tin sản phẩm để tạo lời quảng cáo và chọn giọng đọc tiếng Việt phù hợp với nội dung.",
+    note: "Tính năng tạo lời thoại cần được thiết lập trước trong hệ thống.",
   },
   {
     title: "Phụ đề và thời lượng",

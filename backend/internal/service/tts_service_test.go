@@ -41,12 +41,12 @@ func TestGetVoicesReturnsBundledVietnameseVoice(t *testing.T) {
 	if voices[0].ID != freeVietnameseVoiceID {
 		t.Fatalf("GetVoices()[0].ID = %q, want %q", voices[0].ID, freeVietnameseVoiceID)
 	}
-	if !strings.Contains(voices[0].Name, "Piper") {
-		t.Fatalf("GetVoices()[0].Name = %q, want Piper voice label", voices[0].Name)
+	if strings.Contains(voices[0].Name, "Piper") {
+		t.Fatalf("GetVoices()[0].Name = %q, should not expose implementation details", voices[0].Name)
 	}
 }
 
-func TestGetVoicesUsesConfiguredPiperModelName(t *testing.T) {
+func TestGetVoicesHidesConfiguredModelName(t *testing.T) {
 	modelPath := filepath.Join(t.TempDir(), "custom-vietnamese.onnx")
 	if err := os.WriteFile(modelPath, []byte("model"), 0600); err != nil {
 		t.Fatalf("create custom model fixture: %v", err)
@@ -61,8 +61,8 @@ func TestGetVoicesUsesConfiguredPiperModelName(t *testing.T) {
 	if len(voices) == 0 {
 		t.Fatal("GetVoices() returned no configured voice")
 	}
-	if !strings.Contains(voices[0].Name, "custom-vietnamese") {
-		t.Fatalf("GetVoices()[0] = %+v, want the configured model name", voices[0])
+	if strings.Contains(voices[0].Name, "custom-vietnamese") {
+		t.Fatalf("GetVoices()[0] = %+v, should not expose the configured model filename", voices[0])
 	}
 }
 

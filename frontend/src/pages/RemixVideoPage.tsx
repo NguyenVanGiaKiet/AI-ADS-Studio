@@ -207,7 +207,7 @@ export default function RemixVideoPage() {
   const [scriptStyle, setScriptStyle] = useState('professional');
   const [voice, setVoice] = useState('');
   const [voices, setVoices] = useState<VoiceOption[]>([]);
-  const [speechRate, setSpeechRate] = useState(1);
+  const [speechRate, setSpeechRate] = useState(0.8);
   const [notice, setNotice] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -394,7 +394,6 @@ export default function RemixVideoPage() {
       if (!result.data?.audioUrl) throw new Error('Backend không trả về audio preview.');
       previewAudioRef.current?.pause();
       const audio = new Audio();
-      audio.crossOrigin = 'use-credentials';
       audio.src = `${API_BASE}${result.data.audioUrl}`;
       previewAudioRef.current = audio;
       audio.onended = () => {
@@ -409,7 +408,7 @@ export default function RemixVideoPage() {
           previewAudioRef.current = null;
           previewRequestRef.current = null;
           setIsSpeaking(false);
-          setNotice('Không phát được audio preview do Piper tạo.');
+          setNotice('Không phát được bản nghe thử.');
         }
       };
       await audio.play();
@@ -417,7 +416,7 @@ export default function RemixVideoPage() {
         audio.pause();
         return;
       }
-      setNotice('Đang phát giọng đọc Piper tiếng Việt chạy cục bộ trên backend.');
+      setNotice('Đang phát bản nghe thử giọng đọc tiếng Việt.');
     } catch (error) {
       if (!controller.signal.aborted) {
         setIsSpeaking(false);
@@ -438,7 +437,7 @@ export default function RemixVideoPage() {
     }
 
     setIsProcessing(true);
-    setNotice('Đang kết nối Go Backend & tải lên video nguồn...');
+    setNotice('Đang kết nối dịch vụ và tải lên video nguồn...');
     setCurrentTask(null);
     setOutputVideos([]);
     setOutputTaskId(null);
@@ -482,7 +481,7 @@ export default function RemixVideoPage() {
       });
 
       if (!taskRes.ok) {
-        throw new Error('Không thể tạo tiến trình trên Go Backend');
+        throw new Error('Không thể tạo tiến trình xử lý video');
       }
 
       const taskJson = await taskRes.json();
@@ -494,7 +493,7 @@ export default function RemixVideoPage() {
 
     } catch (error) {
       setIsProcessing(false);
-      setNotice(`Lỗi: ${error instanceof Error ? error.message : 'Chưa thể kết nối tới Go Backend'}`);
+      setNotice(`Lỗi: ${error instanceof Error ? error.message : 'Chưa thể kết nối tới dịch vụ xử lý'}`);
     }
   }
 
@@ -615,7 +614,7 @@ export default function RemixVideoPage() {
         <div className="mt-5 space-y-3 border-t-2 border-dashed border-[#7B2FFF]/50 pt-4">
           <label className="flex cursor-pointer items-start gap-2.5">
             <input type="checkbox" checked={replaceVoice} onChange={event => { const enabled = event.target.checked; setReplaceVoice(enabled); if (!enabled) setFollowSubtitles(false); }} className="mt-0.5 size-4 accent-[#00F5D4]" />
-            <span><span className="block text-xs font-black uppercase tracking-wide text-white/75">Thay âm thanh video bằng giọng đọc quảng cáo</span><span className="mt-1 block text-[11px] leading-relaxed text-white/40">Piper tạo giọng tiếng Việt trực tiếp trong backend rồi FFmpeg ghép vào video.</span></span>
+            <span><span className="block text-xs font-black uppercase tracking-wide text-white/75">Thay âm thanh video bằng giọng đọc quảng cáo</span><span className="mt-1 block text-[11px] leading-relaxed text-white/40">Tạo lời thoại tiếng Việt và ghép vào video với thời lượng phù hợp.</span></span>
           </label>
           <label className="flex cursor-pointer items-start gap-2.5">
             <input type="checkbox" checked={followSubtitles} disabled={!replaceVoice} onChange={event => setFollowSubtitles(event.target.checked)} className="mt-0.5 size-4 accent-[#FF3AF2] disabled:cursor-not-allowed disabled:opacity-50" />
@@ -643,10 +642,10 @@ export default function RemixVideoPage() {
       <section className={`${panelClassNames[2]} ${!replaceVoice ? 'opacity-60' : ''}`}>
         <StepTitle number={3}>AI Voice - Giọng đọc quảng cáo</StepTitle>
         <div className="mb-5 rounded-2xl border-2 border-dashed border-[#00F5D4]/50 bg-[#0D0D1A]/60 px-4 py-3 text-xs leading-relaxed text-white/60">
-          <span className="font-black uppercase tracking-wide text-[#00F5D4]">Cách hoạt động:</span> Groq viết kịch bản → Piper đọc tiếng Việt bằng model cục bộ → backend tự căn thời lượng lời đọc theo video → FFmpeg ghép vào video. Cần GROQ_API_KEY để viết kịch bản; TTS không cần API key hay kết nối dịch vụ bên ngoài. <span className="font-bold text-[#FFE600]">Để trống nếu chỉ muốn cắt ghép video.</span>
+          <span className="font-black uppercase tracking-wide text-[#00F5D4]">Cách hoạt động:</span> Hệ thống tạo lời quảng cáo từ thông tin sản phẩm, đọc thành giọng tiếng Việt và căn chỉnh theo thời lượng video. <span className="font-bold text-[#FFE600]">Để trống nếu chỉ muốn cắt ghép video.</span>
         </div>
         {!replaceVoice && <p className="mb-4 text-xs font-bold text-[#FF6B35]">Đã tắt giọng đọc thay thế trong cài đặt video.</p>}
-        <Field label="Mô tả sản phẩm (càng chi tiết càng tốt)" hint="Groq dùng mô tả này để viết kịch bản; chỉ nêu thông tin bạn cung cấp.">
+        <Field label="Mô tả sản phẩm (càng chi tiết càng tốt)" hint="Dùng thông tin bạn cung cấp để tạo lời quảng cáo phù hợp.">
           <textarea disabled={!replaceVoice} rows={5} value={productDescription} onChange={event => setProductDescription(event.target.value)} placeholder="VD: Dép nữ quai ngang bản to D07, chất liệu da tổng hợp cao cấp, đế chống trơn, có 2 màu đen và kem, giá 199.000 đồng, mua 2 tặng 1, phù hợp đi làm đi chơi, sản phẩm bán chạy nhất shop..." className={`${inputClassName} min-h-32 resize-y leading-relaxed disabled:cursor-not-allowed`} />
         </Field>
         <div className="mt-5 grid gap-5 sm:grid-cols-2">
@@ -668,7 +667,7 @@ export default function RemixVideoPage() {
               </select>
               <button type="button" disabled={!replaceVoice} onClick={previewVoice} aria-pressed={isSpeaking} className="shrink-0 rounded-full border-2 border-[#FF6B35] bg-[#0D0D1A]/70 px-4 text-xs font-black uppercase tracking-wide text-[#FF6B35] transition hover:bg-[#FF6B35] hover:text-[#0D0D1A] disabled:cursor-not-allowed disabled:opacity-50">{isSpeaking ? '■ Dừng' : '▶ Nghe thử'}</button>
             </div>
-            <span className="mt-1.5 block text-[11px] text-white/40">Các voice chạy cục bộ, không tốn phí API. Bấm để nghe thử voice đang chọn.</span>
+            <span className="mt-1.5 block text-[11px] text-white/40">Chọn giọng đọc và bấm để nghe thử.</span>
           </Field>
         </div>
         <p className="mt-3 text-[11px] font-bold text-[#FFE600]">
@@ -677,7 +676,7 @@ export default function RemixVideoPage() {
         <div className="mt-5">
           <div className="mb-2 flex items-center justify-between text-xs font-black uppercase tracking-wide text-[#00F5D4]"><label htmlFor="speech-rate">Tốc độ đọc: {speechRate.toFixed(1)}x</label><span className="text-white/40">0.7x - 1.3x</span></div>
           <input id="speech-rate" disabled={!replaceVoice} type="range" min={0.7} max={1.3} step={0.1} value={speechRate} onChange={event => setSpeechRate(Number(event.target.value))} className="h-2 w-full cursor-pointer accent-[#00F5D4] disabled:cursor-not-allowed" />
-          <div className="mt-1 flex justify-between text-[10px] text-white/40"><span>0.7 = chậm rãi</span><span>1.0 = bình thường</span><span>1.3 = nhanh</span></div>
+          <div className="mt-1 flex justify-between text-[10px] text-white/40"><span>0.7 = chậm rãi</span><span>0.8 = khuyến nghị · 1.0 = tiêu chuẩn</span><span>1.3 = nhanh</span></div>
         </div>
       </section>
 
@@ -685,7 +684,7 @@ export default function RemixVideoPage() {
         <StepTitle number={4}>Xử lý</StepTitle>
         <div className="flex flex-wrap gap-2.5">
           <button type="button" disabled={videos.length < 2 || isProcessing} onClick={startRemix} className="rounded-full border-4 border-[#FFE600] bg-gradient-to-r from-[#FF3AF2] via-[#7B2FFF] to-[#00F5D4] px-6 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40">
-            {isProcessing ? 'Đang xử lý trên Server Go...' : 'Bắt đầu tạo video'}
+            {isProcessing ? 'Đang xử lý video...' : 'Bắt đầu tạo video'}
           </button>
           <button type="button" disabled={isProcessing} onClick={() => { setVideos([]); setProductDescription(''); setNotice(''); setCurrentTask(null); setOutputVideos([]); setOutputTaskId(null); }} className="rounded-full border-4 border-dashed border-[#00F5D4] bg-[#0D0D1A]/50 px-5 py-3 text-xs font-black uppercase tracking-widest text-[#00F5D4] transition hover:bg-[#00F5D4] hover:text-[#0D0D1A] disabled:cursor-not-allowed disabled:opacity-40">+ Remix video mới</button>
         </div>
@@ -703,7 +702,7 @@ export default function RemixVideoPage() {
             <p className="mt-2 text-xs text-white/70">{currentTask.message}</p>
             {(currentTask.scripts?.length || currentTask.script) && (
               <div className="mt-3 border-t border-dashed border-[#00F5D4]/30 pt-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-[#FFE600]">Kịch bản Groq ({currentTask.scripts?.length ?? 1})</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#FFE600]">Kịch bản quảng cáo ({currentTask.scripts?.length ?? 1})</p>
                 <div className="mt-2 space-y-2">
                   {(currentTask.scripts ?? [currentTask.script!]).map((script, index) => (
                     <details key={`${index}-${script.slice(0, 20)}`} className="rounded-xl border border-white/10 bg-white/[0.03] p-2">
@@ -744,7 +743,6 @@ export default function RemixVideoPage() {
                 <article key={video.id} className="overflow-hidden rounded-2xl border-2 border-[#FF3AF2]/60 bg-[#0D0D1A]/90">
                   <video
                     src={`${API_BASE}${video.url}`}
-                    crossOrigin="use-credentials"
                     controls
                     preload="metadata"
                     className="aspect-[9/16] max-h-[420px] w-full bg-black object-contain"

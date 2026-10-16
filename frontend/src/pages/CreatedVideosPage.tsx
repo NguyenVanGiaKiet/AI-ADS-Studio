@@ -198,7 +198,7 @@ export default function CreatedVideosPage({ onNavigateToCreate }: { onNavigateTo
       {loading && (
         <div className="rounded-3xl border-4 border-dashed border-[#00F5D4]/40 bg-[#2D1B4E]/60 p-12 text-center">
           <div className="mb-3 text-4xl animate-bounce">⏳</div>
-          <p className="text-sm font-bold text-[#00F5D4]">Đang tải danh sách video đã tạo từ Server Go...</p>
+          <p className="text-sm font-bold text-[#00F5D4]">Đang tải danh sách video đã tạo...</p>
         </div>
       )}
 
@@ -284,7 +284,6 @@ export default function CreatedVideosPage({ onNavigateToCreate }: { onNavigateTo
                         <div className="relative mb-3 overflow-hidden rounded-2xl border-2 border-[#0D0D1A] bg-[#0D0D1A]">
                           <video
                             src={videoSrc}
-                            crossOrigin="use-credentials"
                             controls
                             preload="metadata"
                             className="aspect-[9/16] w-full object-contain"

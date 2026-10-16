@@ -85,15 +85,14 @@ func findBundledVoiceModel() string {
 }
 
 func freeVietnameseVoice(modelPath string) model.VoiceOption {
-	modelName := strings.TrimSuffix(filepath.Base(modelPath), filepath.Ext(modelPath))
-	name := fmt.Sprintf("Tiếng Việt — %s (Piper, chạy cục bộ)", modelName)
+	name := "Tiếng Việt — Giọng mặc định"
 	if filepath.Base(modelPath) == vietnameseVoiceModel {
-		name = "Tiếng Việt — VAI 1000 (Piper, chạy cục bộ)"
+		name = "Tiếng Việt — VAI 1000"
 	}
 	return model.VoiceOption{
 		ID:          freeVietnameseVoiceID,
 		Name:        name,
-		Description: fmt.Sprintf("Giọng tiếng Việt chạy cục bộ bằng model %s.", modelName),
+		Description: "Giọng đọc tiếng Việt tự nhiên, phù hợp cho nội dung quảng cáo.",
 		Gender:      "neutral",
 		Style:       "Vietnamese",
 	}
@@ -116,8 +115,8 @@ func (s *TTSService) GetVoices() ([]model.VoiceOption, error) {
 	if _, err := os.Stat(hoursModelPath); err == nil {
 		voices = append(voices, model.VoiceOption{
 			ID:          "vi-vn-25hours-single",
-			Name:        "Tiếng Việt — 25Hours (giọng đơn)",
-			Description: "Giọng tiếng Việt Piper 25Hours, chạy cục bộ.",
+			Name:        "Tiếng Việt — 25Hours",
+			Description: "Giọng đọc tiếng Việt rõ ràng, dễ nghe.",
 			Gender:      "neutral",
 			Style:       "Vietnamese",
 		})
@@ -130,8 +129,8 @@ func (s *TTSService) GetVoices() ([]model.VoiceOption, error) {
 		for speakerID, speakerName := range vietnameseCSASpeakers {
 			voices = append(voices, model.VoiceOption{
 				ID:          fmt.Sprintf("vi-vn-csa-%d", speakerID),
-				Name:        fmt.Sprintf("Tiếng Việt — %s (Piper v3)", speakerName),
-				Description: "Giọng tiếng Việt Piper v3, chạy cục bộ.",
+				Name:        fmt.Sprintf("Tiếng Việt — %s", speakerName),
+				Description: "Giọng đọc tiếng Việt tự nhiên.",
 				Gender:      "neutral",
 				Style:       "Vietnamese",
 			})

@@ -3,8 +3,11 @@
 *.mov
 *.avi
 *.mkv
+*.exe
+
 storage/outputs/videos.json
 models/*.onnx
 models/*.onnx.json
 .env
 config.env
+release/
