@@ -74,7 +74,7 @@ export default function AnalyticsPage() {
         <div className="mb-1 text-sm font-black uppercase tracking-widest text-[#FF6B35]">
           📊 Thống kê cục bộ
         </div>
-        <h1 className="font-['Unbounded'] text-3xl font-black md:text-4xl">
+        <h1 className="font-['Be Vietnam Pro'] text-3xl font-black md:text-4xl">
           Số liệu <span className="gradient-text">video đã tạo</span>
         </h1>
         <p className="mt-2 text-sm text-white/50">
@@ -104,7 +104,7 @@ export default function AnalyticsPage() {
             <div className="flex justify-between text-xs font-black uppercase tracking-widest text-white/55">
               {label}<span className="text-xl" aria-hidden="true">{icon}</span>
             </div>
-            <div className="mt-4 break-words font-['Unbounded'] text-2xl font-black" style={{ color: ACCENTS[index] }}>
+            <div className="mt-4 break-words font-['Be Vietnam Pro'] text-2xl font-black" style={{ color: ACCENTS[index] }}>
               {value}
             </div>
           </div>
@@ -112,7 +112,7 @@ export default function AnalyticsPage() {
       </section>
 
       <section className="rounded-3xl border-4 border-[#FF3AF2] bg-[#2D1B4E] p-6">
-        <h2 className="font-['Unbounded'] text-sm font-black uppercase tracking-wide text-[#FF3AF2]">
+        <h2 className="font-['Be Vietnam Pro'] text-sm font-black uppercase tracking-wide text-[#FF3AF2]">
           Video đầu ra trong 7 ngày gần nhất
         </h2>
         {loading ? (
@@ -143,7 +143,7 @@ export default function AnalyticsPage() {
 
       <section className="overflow-hidden rounded-3xl border-4 border-[#FFE600] bg-[#2D1B4E]">
         <div className="border-b-2 border-dashed border-[#FFE600]/40 px-5 py-4">
-          <h2 className="font-['Unbounded'] text-sm font-black uppercase tracking-wide text-[#FFE600]">
+          <h2 className="font-['Be Vietnam Pro'] text-sm font-black uppercase tracking-wide text-[#FFE600]">
             Tác vụ gần đây
           </h2>
         </div>

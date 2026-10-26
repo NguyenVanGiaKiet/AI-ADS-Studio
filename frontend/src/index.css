@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@400;700;800;900&family=DM+Sans:wght@400;500;600;700&family=Bangers&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&subset=vietnamese&display=swap');
 @import 'tailwindcss';
 
 @theme {
@@ -10,9 +10,9 @@
   --color-orange: #FF6B35;
   --color-purple: #7B2FFF;
 
-  --font-display: 'Unbounded', sans-serif;
-  --font-body: 'DM Sans', sans-serif;
-  --font-accent: 'Bangers', cursive;
+  --font-display: 'Be Vietnam Pro', sans-serif;
+  --font-body: 'Be Vietnam Pro', sans-serif;
+  --font-accent: 'Be Vietnam Pro', sans-serif;
 }
 
 * {
@@ -42,8 +42,83 @@ html::-webkit-scrollbar-thumb:hover {
 body {
   background-color: #0D0D1A;
   color: #ffffff;
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Be Vietnam Pro', sans-serif;
   overflow-x: hidden;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='light'] body {
+  background-color: #f8fafc;
+  color: #1e293b;
+}
+
+:root[data-theme='light'] [class*='bg-[#0D0D1A]'] {
+  background-color: #f8fafc !important;
+}
+
+:root[data-theme='light'] [class*='bg-[#2D1B4E]'] {
+  background-color: #ffffff !important;
+}
+
+:root[data-theme='light'] [class*='bg-[#080B14]'] {
+  background-color: #f1f5f9 !important;
+}
+
+:root[data-theme='light'] [class*='bg-[#142338]'] {
+  background-color: #e2e8f0 !important;
+}
+
+:root[data-theme='light'] [class*='text-white'] {
+  color: #334155 !important;
+}
+
+:root[data-theme='light'] [class*='text-white/40'],
+:root[data-theme='light'] [class*='text-white/45'],
+:root[data-theme='light'] [class*='text-white/50'] {
+  color: #64748b !important;
+}
+
+:root[data-theme='light'] [class*='text-white/60'] {
+  color: #475569 !important;
+}
+
+:root[data-theme='light'] [class*='text-white/70'] {
+  color: #334155 !important;
+}
+
+:root[data-theme='light'] [class*='bg-gradient-to-r'][class*='text-white'] {
+  color: #ffffff !important;
+}
+
+:root[data-theme='light'] [class*='text-[#00F5D4]'] {
+  color: #087f70 !important;
+}
+
+:root[data-theme='light'] [class*='text-[#FF3AF2]'] {
+  color: #b423a8 !important;
+}
+
+:root[data-theme='light'] [class*='text-[#FFE600]'] {
+  color: #8a6d00 !important;
+}
+
+:root[data-theme='light'] [class*='text-[#7B2FFF]'] {
+  color: #5b21b6 !important;
+}
+
+:root[data-theme='light'] [class*='text-[#FF6B35]'] {
+  color: #c2410c !important;
+}
+
+:root[data-theme='light'] [class*='border-white'] {
+  border-color: rgb(15 23 42 / 18%) !important;
+}
+
+:root[data-theme='light'] [class*='placeholder:text-white']::placeholder {
+  color: #64748b !important;
 }
 
 /* ── Animations ─────────────────────────────────────────── */

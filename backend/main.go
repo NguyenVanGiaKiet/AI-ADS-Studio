@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
@@ -39,6 +40,40 @@ func corsMiddleware(next http.Handler, allowedOrigins map[string]bool) http.Hand
 	})
 }
 
+func resolveWebDir(configuredDir, executablePath, workingDir string) (string, error) {
+	if configuredDir = strings.TrimSpace(configuredDir); configuredDir != "" {
+		if _, err := os.Stat(filepath.Join(configuredDir, "index.html")); err != nil {
+			return "", fmt.Errorf("could not access configured frontend entry point in %q: %w", configuredDir, err)
+		}
+		return configuredDir, nil
+	}
+
+	var candidates []string
+	if executablePath != "" {
+		candidates = append(candidates, filepath.Join(filepath.Dir(executablePath), "web"))
+	}
+	if workingDir != "" {
+		candidates = append(candidates,
+			filepath.Join(workingDir, "frontend", "dist"),
+			filepath.Join(filepath.Dir(workingDir), "frontend", "dist"),
+		)
+	}
+
+	for _, candidate := range candidates {
+		entryPoint, err := os.Stat(filepath.Join(candidate, "index.html"))
+		if err == nil {
+			if entryPoint.IsDir() {
+				return "", fmt.Errorf("frontend entry point in %q is a directory", candidate)
+			}
+			return candidate, nil
+		}
+		if !os.IsNotExist(err) {
+			return "", fmt.Errorf("could not access frontend files in %q: %w", candidate, err)
+		}
+	}
+	return "", nil
+}
+
 func main() {
 	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
 		log.Printf("Could not load backend/.env: %v", err)
@@ -51,17 +86,17 @@ func main() {
 	if listenAddress == "" {
 		listenAddress = "127.0.0.1:" + port
 	}
-	webDir := strings.TrimSpace(os.Getenv("APP_WEB_DIR"))
-	if webDir == "" {
-		executablePath, err := os.Executable()
-		if err == nil {
-			webDir = filepath.Join(filepath.Dir(executablePath), "web")
-		} else {
-			log.Printf("Could not locate application executable: %v", err)
-		}
+	executablePath, executableErr := os.Executable()
+	if executableErr != nil {
+		log.Printf("Could not locate application executable: %v", executableErr)
 	}
-	if webDir == "" {
-		webDir = filepath.Join("frontend", "dist")
+	workingDir, workingDirErr := os.Getwd()
+	if workingDirErr != nil {
+		log.Printf("Could not locate working directory: %v", workingDirErr)
+	}
+	webDir, err := resolveWebDir(os.Getenv("APP_WEB_DIR"), executablePath, workingDir)
+	if err != nil {
+		log.Fatalf("Could not locate frontend files: %v", err)
 	}
 	outputDir := filepath.Join("storage", "outputs")
 	temporaryDir, err := os.MkdirTemp("", "ai-ads-studio-")
@@ -101,7 +136,8 @@ func main() {
 	mux.Handle("GET /storage/uploads/", http.StripPrefix("/storage/uploads/", http.FileServer(http.Dir(uploadDir))))
 	mux.Handle("GET /storage/outputs/", http.StripPrefix("/storage/outputs/", http.FileServer(http.Dir(outputDir))))
 	mux.Handle("GET /storage/tts/", http.StripPrefix("/storage/tts/", http.FileServer(http.Dir(ttsDir))))
-	if _, err := os.Stat(filepath.Join(webDir, "index.html")); err == nil {
+	if webDir != "" {
+		log.Printf("Serving frontend files from %q", webDir)
 		staticFiles := http.FileServer(http.Dir(webDir))
 		mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -122,10 +158,8 @@ func main() {
 			}
 			http.ServeFile(w, r, filepath.Join(webDir, "index.html"))
 		}))
-	} else if !os.IsNotExist(err) {
-		log.Fatalf("Could not access frontend files in %q: %v", webDir, err)
 	} else {
-		log.Printf("Frontend files not found in %q; serving API only", webDir)
+		log.Printf("Frontend files not found in executable web directory or frontend\\dist; serving API only")
 	}
 
 	allowedOrigins := make(map[string]bool)

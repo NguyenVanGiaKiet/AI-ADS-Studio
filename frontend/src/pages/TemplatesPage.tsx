@@ -42,7 +42,7 @@ export default function TemplatesPage({
         <div className="mb-1 text-sm font-black uppercase tracking-widest text-[#FFE600]">
           ✨ Hướng dẫn sử dụng
         </div>
-        <h1 className="font-['Unbounded'] text-3xl font-black md:text-4xl">
+        <h1 className="font-['Be Vietnam Pro'] text-3xl font-black md:text-4xl">
           Tạo video với <span className="gradient-text">AI ADS Studio</span>
         </h1>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/60">
@@ -63,7 +63,7 @@ export default function TemplatesPage({
           >
             <div className="flex items-center gap-3">
               <span className="text-3xl" aria-hidden="true">{feature.icon}</span>
-              <h2 className="font-['Unbounded'] text-base font-black" style={{ color: ACCENTS[index] }}>
+              <h2 className="font-['Be Vietnam Pro'] text-base font-black" style={{ color: ACCENTS[index] }}>
                 {index + 1}. {feature.title}
               </h2>
             </div>

@@ -116,7 +116,7 @@ export default function CreatedVideosPage({ onNavigateToCreate }: { onNavigateTo
           <div className="mb-1 text-sm font-black uppercase tracking-widest text-[#FFE600]">
             🎥 Video Library
           </div>
-          <h1 className="font-['Unbounded'] text-3xl font-black text-shadow-lg md:text-4xl">
+          <h1 className="font-['Be Vietnam Pro'] text-3xl font-black text-shadow-lg md:text-4xl">
             Video <span className="gradient-text">Đã Tạo</span>
           </h1>
         </div>
@@ -146,7 +146,7 @@ export default function CreatedVideosPage({ onNavigateToCreate }: { onNavigateTo
               onClick={onNavigateToCreate}
               className="rounded-full border-4 border-[#FFE600] bg-gradient-to-r from-[#FF3AF2] via-[#7B2FFF] to-[#00F5D4] px-6 py-2.5 text-xs font-black uppercase tracking-widest text-white transition hover:scale-105"
             >
-              + Remix Video Mới
+              + Tạo video mới
             </button>
           )}
         </div>
@@ -220,8 +220,8 @@ export default function CreatedVideosPage({ onNavigateToCreate }: { onNavigateTo
       {!loading && !error && videos.length === 0 && (
         <div className="rounded-3xl border-4 border-dashed border-[#FF3AF2]/50 bg-[#2D1B4E] p-12 text-center">
           <div className="mb-4 text-5xl">🎬</div>
-          <h2 className="font-['Unbounded'] text-lg font-black text-white">Chưa có video nào được tạo</h2>
-          <p className="mt-2 text-xs text-white/60">Hãy chuyển sang tab Remix Video để tải video nguồn và tạo bộ video quảng cáo đầu tiên!</p>
+          <h2 className="font-['Be Vietnam Pro'] text-lg font-black text-white">Chưa có video nào được tạo</h2>
+          <p className="mt-2 text-xs text-white/60">Hãy chuyển sang tab Tạo video để tải video nguồn và tạo bộ video quảng cáo đầu tiên!</p>
           {onNavigateToCreate && (
             <button
               type="button"
@@ -259,7 +259,7 @@ export default function CreatedVideosPage({ onNavigateToCreate }: { onNavigateTo
           {sortedDayGroups.map(([dayKey, dayVideos]) => (
             <section key={dayKey} className="space-y-4">
               <div className="flex items-center justify-between gap-3 border-b-2 border-dashed border-[#7B2FFF]/50 pb-3">
-                <h2 className="font-['Unbounded'] text-sm font-black uppercase tracking-wide text-[#00F5D4]">
+                <h2 className="font-['Be Vietnam Pro'] text-sm font-black uppercase tracking-wide text-[#00F5D4]">
                   📅 {getVideoDayLabel(dayKey)}
                 </h2>
                 <span className="rounded-full border border-[#7B2FFF]/60 bg-[#2D1B4E] px-3 py-1 text-[11px] font-bold text-white/60">
@@ -289,7 +289,7 @@ export default function CreatedVideosPage({ onNavigateToCreate }: { onNavigateTo
                             className="aspect-[9/16] w-full object-contain"
                           />
                         </div>
-                        <h3 className="font-['Unbounded'] text-sm font-black text-white group-hover:text-[#00F5D4]">
+                        <h3 className="font-['Be Vietnam Pro'] text-sm font-black text-white group-hover:text-[#00F5D4]">
                           {video.title || video.filename}
                         </h3>
                         <p className="mt-1 truncate text-xs font-bold text-white/60">

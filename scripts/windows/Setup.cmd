@@ -46,6 +46,6 @@ if errorlevel 1 (
 
 if not exist ".env" copy ".env.example" ".env" >nul
 echo.
-echo Setup complete. Configure your administrator password and Groq API key in .env.
+echo Setup complete. Configure your Gemini API key in .env.
 notepad ".env"
 pause

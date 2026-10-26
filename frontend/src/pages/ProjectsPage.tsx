@@ -46,7 +46,7 @@ export default function ProjectsPage({
           <div className="mb-1 text-sm font-black uppercase tracking-widest text-[#FF6B35]">
             ⚙️ Tiến trình xử lý
           </div>
-          <h1 className="font-['Unbounded'] text-3xl font-black">
+          <h1 className="font-['Be Vietnam Pro'] text-3xl font-black">
             <span className="gradient-text">Lịch sử tác vụ</span>
           </h1>
           <p className="mt-2 text-sm text-white/50">
@@ -81,7 +81,7 @@ export default function ProjectsPage({
       ) : error ? null : tasks.length === 0 ? (
         <div className="rounded-3xl border-2 border-dashed border-[#7B2FFF]/50 bg-[#2D1B4E] p-10 text-center">
           <div className="text-4xl" aria-hidden="true">🧩</div>
-          <h2 className="mt-3 font-['Unbounded'] text-lg font-black">Chưa có tác vụ remix</h2>
+          <h2 className="mt-3 font-['Be Vietnam Pro'] text-lg font-black">Chưa có tác vụ remix</h2>
           <p className="mt-2 text-sm text-white/50">
             Tạo tác vụ đầu tiên từ video nguồn của bạn.
           </p>
@@ -101,7 +101,7 @@ export default function ProjectsPage({
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h2 className="break-all font-['Unbounded'] text-sm font-black text-white">
+                    <h2 className="break-all font-['Be Vietnam Pro'] text-sm font-black text-white">
                       Tác vụ {task.id.slice(0, 8)}
                     </h2>
                     <p className="mt-1 text-xs text-white/45">

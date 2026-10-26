@@ -166,7 +166,7 @@ function StepTitle({ number, children }: { number: number; children: React.React
       <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl border-4 border-[#FFE600] text-sm font-black text-[#0D0D1A]" style={{ background: accent, boxShadow: `4px 4px 0 ${ACCENTS[number % ACCENTS.length]}` }}>
         {number}
       </span>
-      <h2 className="font-['Unbounded'] text-sm font-black uppercase tracking-wide text-white text-shadow-sm sm:text-base">{children}</h2>
+      <h2 className="font-['Be Vietnam Pro'] text-sm font-black uppercase tracking-wide text-white text-shadow-sm sm:text-base">{children}</h2>
     </div>
   );
 }
@@ -503,8 +503,8 @@ export default function RemixVideoPage() {
         <div className="mb-1 text-sm font-black uppercase tracking-widest text-[#00F5D4]">
           🎬 Video Editor
         </div>
-        <h1 className="font-['Unbounded'] text-3xl font-black text-shadow-lg md:text-4xl">
-          Remix <span className="gradient-text">Video</span>
+        <h1 className="font-['Be Vietnam Pro'] text-3xl font-black text-shadow-lg md:text-4xl">
+          Tạo <span className="gradient-text">video</span>
         </h1>
       </div>
 
@@ -686,7 +686,7 @@ export default function RemixVideoPage() {
           <button type="button" disabled={videos.length < 2 || isProcessing} onClick={startRemix} className="rounded-full border-4 border-[#FFE600] bg-gradient-to-r from-[#FF3AF2] via-[#7B2FFF] to-[#00F5D4] px-6 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40">
             {isProcessing ? 'Đang xử lý video...' : 'Bắt đầu tạo video'}
           </button>
-          <button type="button" disabled={isProcessing} onClick={() => { setVideos([]); setProductDescription(''); setNotice(''); setCurrentTask(null); setOutputVideos([]); setOutputTaskId(null); }} className="rounded-full border-4 border-dashed border-[#00F5D4] bg-[#0D0D1A]/50 px-5 py-3 text-xs font-black uppercase tracking-widest text-[#00F5D4] transition hover:bg-[#00F5D4] hover:text-[#0D0D1A] disabled:cursor-not-allowed disabled:opacity-40">+ Remix video mới</button>
+          <button type="button" disabled={isProcessing} onClick={() => { setVideos([]); setProductDescription(''); setNotice(''); setCurrentTask(null); setOutputVideos([]); setOutputTaskId(null); }} className="rounded-full border-4 border-dashed border-[#00F5D4] bg-[#0D0D1A]/50 px-5 py-3 text-xs font-black uppercase tracking-widest text-[#00F5D4] transition hover:bg-[#00F5D4] hover:text-[#0D0D1A] disabled:cursor-not-allowed disabled:opacity-40">+ Tạo video mới</button>
         </div>
 
         {/* Live Progress Indicator */}
@@ -725,7 +725,7 @@ export default function RemixVideoPage() {
           <div className="mt-6 border-t-2 border-dashed border-[#00F5D4]/40 pt-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="font-['Unbounded'] text-base font-black uppercase text-[#FFE600]">🎉 Video đã tạo ({outputVideos.length})</h3>
+                <h3 className="font-['Be Vietnam Pro'] text-base font-black uppercase text-[#FFE600]">🎉 Video đã tạo ({outputVideos.length})</h3>
                 <p className="mt-1 text-xs text-white/50">Xem trước, tải riêng từng video hoặc tải toàn bộ dưới dạng ZIP.</p>
               </div>
               {outputTaskId && (

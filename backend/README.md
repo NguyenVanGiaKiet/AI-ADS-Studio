@@ -23,8 +23,13 @@ python -m pip install -r requirements.txt
 Run the Go backend from this directory so its existing relative storage paths resolve as expected:
 
 ```powershell
+Set-Location ..\frontend
+npm run build
+Set-Location ..\backend
 go run .
 ```
+
+With `go run .`, the backend serves the built frontend from `..\frontend\dist`; packaged builds serve the `web` directory beside the executable. Set `APP_WEB_DIR` to override the frontend directory.
 
 Copy `backend/.env.example` to `backend/.env` before starting the server:
 

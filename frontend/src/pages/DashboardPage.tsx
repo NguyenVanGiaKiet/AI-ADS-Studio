@@ -68,7 +68,7 @@ export default function DashboardPage({
                 AI ADS STUDIO
               </span>
             </div>
-            <h1 className="font-['Unbounded'] text-3xl font-black leading-tight md:text-5xl">
+            <h1 className="font-['Be Vietnam Pro'] text-3xl font-black leading-tight md:text-5xl">
               Tạo video quảng cáo
               <br />
               <span className="gradient-text">từ video sản phẩm</span>
@@ -83,7 +83,7 @@ export default function DashboardPage({
             onClick={() => onNavigate("create")}
             className="shrink-0 rounded-full border-4 border-[#FFE600] bg-gradient-to-r from-[#FF3AF2] via-[#7B2FFF] to-[#00F5D4] px-7 py-4 text-sm font-black uppercase tracking-widest text-white transition hover:scale-105"
           >
-            + Remix video
+            + Tạo video
           </button>
         </div>
       </section>
@@ -96,7 +96,7 @@ export default function DashboardPage({
       )}
 
       <section>
-        <h2 className="mb-4 font-['Unbounded'] text-lg font-black uppercase tracking-wide">
+        <h2 className="mb-4 font-['Be Vietnam Pro'] text-lg font-black uppercase tracking-wide">
           Tổng quan dữ liệu thực tế
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -134,7 +134,7 @@ export default function DashboardPage({
                 </span>
                 <span className="text-2xl" aria-hidden="true">{stat.icon}</span>
               </div>
-              <div className="mt-4 break-words font-['Unbounded'] text-2xl font-black" style={{ color: ACCENTS[index] }}>
+              <div className="mt-4 break-words font-['Be Vietnam Pro'] text-2xl font-black" style={{ color: ACCENTS[index] }}>
                 {stat.value}
               </div>
               <p className="mt-2 text-xs text-white/45">{stat.note}</p>
@@ -145,7 +145,7 @@ export default function DashboardPage({
 
       <section className="overflow-hidden rounded-3xl border-4 border-[#7B2FFF] bg-[#2D1B4E]">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-dashed border-[#7B2FFF]/50 px-5 py-4">
-          <h2 className="font-['Unbounded'] text-sm font-black uppercase tracking-wide">
+          <h2 className="font-['Be Vietnam Pro'] text-sm font-black uppercase tracking-wide">
             Video mới tạo
           </h2>
           <button

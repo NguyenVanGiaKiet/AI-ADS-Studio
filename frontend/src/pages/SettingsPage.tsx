@@ -59,7 +59,7 @@ export default function SettingsPage() {
           <div className="mb-1 text-sm font-black uppercase tracking-widest text-[#7B2FFF]">
             ⚙️ Tình trạng dịch vụ
           </div>
-          <h1 className="font-['Unbounded'] text-3xl font-black">
+          <h1 className="font-['Be Vietnam Pro'] text-3xl font-black">
             Thiết lập <span className="gradient-text">hệ thống</span>
           </h1>
           <p className="mt-2 text-sm text-white/50">
@@ -79,7 +79,7 @@ export default function SettingsPage() {
       <section className="grid gap-5 md:grid-cols-2">
         <article className="rounded-3xl border-4 border-[#00F5D4] bg-[#2D1B4E] p-6">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="font-['Unbounded'] text-sm font-black uppercase text-[#00F5D4]">
+            <h2 className="font-['Be Vietnam Pro'] text-sm font-black uppercase text-[#00F5D4]">
               Dịch vụ xử lý
             </h2>
             <span className={`rounded-full border px-3 py-1 text-xs font-black ${health ? "border-[#00F5D4] text-[#00F5D4]" : "border-[#FF6B35] text-[#FF6B35]"}`}>
@@ -96,7 +96,7 @@ export default function SettingsPage() {
         </article>
 
         <article className="rounded-3xl border-4 border-[#FF3AF2] bg-[#2D1B4E] p-6">
-          <h2 className="font-['Unbounded'] text-sm font-black uppercase text-[#FF3AF2]">
+          <h2 className="font-['Be Vietnam Pro'] text-sm font-black uppercase text-[#FF3AF2]">
             Tạo lời thoại và giọng đọc
           </h2>
           <ul className="mt-4 space-y-3 text-sm leading-relaxed text-white/70">
@@ -113,7 +113,7 @@ export default function SettingsPage() {
 
       <section className="rounded-3xl border-4 border-[#FFE600] bg-[#2D1B4E] p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-['Unbounded'] text-sm font-black uppercase text-[#FFE600]">
+          <h2 className="font-['Be Vietnam Pro'] text-sm font-black uppercase text-[#FFE600]">
             Giọng đọc khả dụng
           </h2>
           <span className="text-xs font-bold text-white/45">

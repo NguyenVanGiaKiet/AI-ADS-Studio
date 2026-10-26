@@ -11,11 +11,13 @@ import CreatedVideosPage from "./pages/CreatedVideosPage"
 import { ACCENTS } from "./pages/shared"
 
 type Tab = "dashboard" | "create" | "videos" | "projects" | "templates" | "analytics" | "settings"
+type Theme = "dark" | "light"
 const ACTIVE_TAB_KEY = "ai-ads-studio:active-tab"
+const THEME_KEY = "ai-ads-studio:theme"
 
 const NAV_ITEMS: { id: Tab; label: string; icon: string }[] = [
   { id: "dashboard", label: "Tổng quan", icon: "⚡" },
-  { id: "create", label: "Remix Video", icon: "🎬" },
+  { id: "create", label: "Tạo video", icon: "🎬" },
   { id: "videos", label: "Video Đã Tạo", icon: "🎞️" },
   { id: "projects", label: "Lịch sử tác vụ", icon: "⚙️" },
   { id: "templates", label: "Hướng dẫn", icon: "📖" },
@@ -60,9 +62,13 @@ function Floaties() {
 function Sidebar({
   active,
   onNav,
+  theme,
+  onThemeToggle,
 }: {
   active: Tab
   onNav: (tab: Tab) => void
+  theme: Theme
+  onThemeToggle: () => void
 }) {
   return (
     <aside
@@ -85,7 +91,7 @@ function Sidebar({
             className="size-14 rounded-2xl border-2 border-[#00F5D4]/70 object-cover shadow-[0_0_22px_rgba(0,245,212,0.25)]"
           />
           <div>
-            <div className="font-['Unbounded'] font-black text-lg leading-tight gradient-text">
+            <div className="font-['Be Vietnam Pro'] font-black text-lg leading-tight gradient-text">
               AI ADS Studio
             </div>
             <div className="text-[#00F5D4] text-xs font-bold uppercase tracking-widest">
@@ -144,11 +150,21 @@ function Sidebar({
         })}
       </nav>
       <div className="px-4 pb-6">
+        <button
+          type="button"
+          onClick={onThemeToggle}
+          aria-label={`Chuyển sang chế độ ${theme === "dark" ? "sáng" : "tối"}`}
+          aria-pressed={theme === "light"}
+          className="mb-4 flex w-full items-center justify-center gap-2 rounded-full border-2 border-[#00F5D4] bg-[#0D0D1A] px-4 py-2.5 text-xs font-black uppercase tracking-widest text-[#00F5D4] transition hover:bg-[#00F5D4] hover:text-[#0D0D1A]"
+        >
+          <span aria-hidden="true">{theme === "dark" ? "☀️" : "🌙"}</span>
+          Chế độ {theme === "dark" ? "sáng" : "tối"}
+        </button>
         <div className="rounded-3xl border-4 border-[#FFE600] bg-[#2D1B4E] p-4 shadow-multi-sm">
           <div className="text-[#FFE600] text-xs font-black uppercase tracking-widest animate-wiggle inline-block">
             🎬 TẠO VIDEO
           </div>
-          <div className="font-['Unbounded'] font-black text-sm mt-1 text-white">
+          <div className="font-['Be Vietnam Pro'] font-black text-sm mt-1 text-white">
             Remix từ video nguồn
           </div>
           <div className="text-white/60 text-xs mt-1">
@@ -172,10 +188,18 @@ export default function App() {
     return NAV_ITEMS.find(item => item.id === savedTab)?.id ?? "dashboard"
   })
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [theme, setTheme] = useState<Theme>(() => (
+    window.localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark"
+  ))
 
   useEffect(() => {
     window.localStorage.setItem(ACTIVE_TAB_KEY, activeTab)
   }, [activeTab])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    window.localStorage.setItem(THEME_KEY, theme)
+  }, [theme])
 
   const renderActivePage = () => {
     switch (activeTab) {
@@ -233,6 +257,8 @@ export default function App() {
         >
           <Sidebar
             active={activeTab}
+            theme={theme}
+            onThemeToggle={() => setTheme(current => current === "dark" ? "light" : "dark")}
             onNav={(tab) => {
               setActiveTab(tab)
               setSidebarOpen(false)
